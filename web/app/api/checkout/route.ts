@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { createServerClient, getUser } from "@/lib/supabase/server"
 import { getStripe } from "@/lib/stripe"
 
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic"
  * Creates a Stripe Checkout session for Pro upgrade.
  * Returns { url } to redirect the user to.
  */
-export async function POST(request: NextRequest) {
+export async function POST() {
   const user = await getUser()
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
@@ -28,7 +28,6 @@ export async function POST(request: NextRequest) {
   }
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
-  const stripe = getStripe()
 
   // Reuse existing Stripe customer if available
   const customerParams: Record<string, string> = {}
@@ -38,21 +37,26 @@ export async function POST(request: NextRequest) {
     customerParams.customer_email = user.email!
   }
 
-  const session = await stripe.checkout.sessions.create({
-    mode: "subscription",
-    ...customerParams,
-    line_items: [
-      {
-        price: process.env.STRIPE_PRICE_PRO!,
-        quantity: 1,
+  try {
+    const session = await getStripe().checkout.sessions.create({
+      mode: "subscription",
+      ...customerParams,
+      line_items: [
+        {
+          price: process.env.STRIPE_PRICE_PRO!,
+          quantity: 1,
+        },
+      ],
+      metadata: {
+        user_id: user.id,
       },
-    ],
-    metadata: {
-      user_id: user.id,
-    },
-    success_url: `${siteUrl}/settings?billing=success`,
-    cancel_url: `${siteUrl}/settings?billing=canceled`,
-  })
+      success_url: `${siteUrl}/settings?billing=success`,
+      cancel_url: `${siteUrl}/settings?billing=canceled`,
+    })
 
-  return NextResponse.json({ url: session.url })
+    return NextResponse.json({ url: session.url })
+  } catch (err) {
+    console.error("Stripe checkout session creation failed:", err)
+    return NextResponse.json({ error: "Failed to create checkout session" }, { status: 500 })
+  }
 }

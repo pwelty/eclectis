@@ -12,12 +12,19 @@ function getPeriodEnd(subscription: Stripe.Subscription): string | null {
   return new Date(firstItem.current_period_end * 1000).toISOString()
 }
 
-/** Resolve plan from subscription price ID. */
+/** Resolve plan from subscription price ID. Returns null for unrecognized prices. */
 function resolvePlan(subscription: Stripe.Subscription): string | null {
   const priceId = subscription.items?.data?.[0]?.price?.id
   if (!priceId) return null
   if (priceId === process.env.STRIPE_PRICE_PRO) return "pro"
   return null
+}
+
+/** Extract customer ID string safely from session.customer (string | object | null). */
+function getCustomerId(customer: string | Stripe.Customer | Stripe.DeletedCustomer | null): string | null {
+  if (!customer) return null
+  if (typeof customer === "string") return customer
+  return customer.id ?? null
 }
 
 /**
@@ -57,6 +64,12 @@ export async function POST(request: NextRequest) {
       const userId = session.metadata?.user_id
       if (!userId) break
 
+      const customerId = getCustomerId(session.customer)
+      if (!customerId) {
+        console.error("checkout.session.completed missing customer ID for user", userId)
+        break
+      }
+
       const subscriptionId =
         typeof session.subscription === "string"
           ? session.subscription
@@ -64,27 +77,38 @@ export async function POST(request: NextRequest) {
 
       let currentPeriodEnd: string | null = null
       let subscriptionStatus = "active"
-      let plan = "pro"
+      // Fail safe to "free" if price ID is unrecognized
+      let plan = "free"
 
       if (subscriptionId) {
-        const subscription = await getStripe().subscriptions.retrieve(subscriptionId, {
-          expand: ["items"],
-        })
-        currentPeriodEnd = getPeriodEnd(subscription)
-        plan = resolvePlan(subscription) ?? "pro"
-        subscriptionStatus = subscription.status
+        try {
+          const subscription = await getStripe().subscriptions.retrieve(subscriptionId, {
+            expand: ["items"],
+          })
+          currentPeriodEnd = getPeriodEnd(subscription)
+          plan = resolvePlan(subscription) ?? "free"
+          subscriptionStatus = subscription.status
+        } catch (err) {
+          console.error("Failed to retrieve subscription from Stripe:", err)
+          return NextResponse.json({ error: "Stripe API error" }, { status: 500 })
+        }
       }
 
-      await supabase
+      const { error: dbError } = await supabase
         .from("user_profiles")
         .update({
-          stripe_customer_id: session.customer as string,
+          stripe_customer_id: customerId,
           stripe_subscription_id: subscriptionId ?? null,
           subscription_status: subscriptionStatus,
           plan,
           current_period_end: currentPeriodEnd,
         })
         .eq("id", userId)
+
+      if (dbError) {
+        console.error("DB update failed on checkout.session.completed:", dbError)
+        return NextResponse.json({ error: "DB update failed" }, { status: 500 })
+      }
 
       break
     }
@@ -100,9 +124,10 @@ export async function POST(request: NextRequest) {
       if (!profile) break
 
       const isActive = ["active", "trialing"].includes(subscription.status)
-      const resolvedPlan = isActive ? (resolvePlan(subscription) ?? "pro") : "free"
+      // Fail safe: unrecognized price → "free"
+      const resolvedPlan = isActive ? (resolvePlan(subscription) ?? "free") : "free"
 
-      await supabase
+      const { error: dbError } = await supabase
         .from("user_profiles")
         .update({
           subscription_status: subscription.status,
@@ -110,6 +135,11 @@ export async function POST(request: NextRequest) {
           current_period_end: getPeriodEnd(subscription),
         })
         .eq("id", profile.id)
+
+      if (dbError) {
+        console.error("DB update failed on customer.subscription.updated:", dbError)
+        return NextResponse.json({ error: "DB update failed" }, { status: 500 })
+      }
 
       break
     }
@@ -124,7 +154,7 @@ export async function POST(request: NextRequest) {
 
       if (!profile) break
 
-      await supabase
+      const { error: dbError } = await supabase
         .from("user_profiles")
         .update({
           subscription_status: "canceled",
@@ -133,6 +163,11 @@ export async function POST(request: NextRequest) {
           current_period_end: null,
         })
         .eq("id", profile.id)
+
+      if (dbError) {
+        console.error("DB update failed on customer.subscription.deleted:", dbError)
+        return NextResponse.json({ error: "DB update failed" }, { status: 500 })
+      }
 
       break
     }

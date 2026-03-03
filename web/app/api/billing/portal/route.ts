@@ -28,12 +28,16 @@ export async function POST() {
   }
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
-  const stripe = getStripe()
 
-  const session = await stripe.billingPortal.sessions.create({
-    customer: profile.stripe_customer_id,
-    return_url: `${siteUrl}/settings`,
-  })
+  try {
+    const session = await getStripe().billingPortal.sessions.create({
+      customer: profile.stripe_customer_id,
+      return_url: `${siteUrl}/settings`,
+    })
 
-  return NextResponse.json({ url: session.url })
+    return NextResponse.json({ url: session.url })
+  } catch (err) {
+    console.error("Stripe portal session creation failed:", err)
+    return NextResponse.json({ error: "Failed to create portal session" }, { status: 500 })
+  }
 }

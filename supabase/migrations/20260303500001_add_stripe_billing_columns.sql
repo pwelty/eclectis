@@ -1,7 +1,7 @@
 -- Add Stripe billing columns to user_profiles for free/pro tiers
 
 ALTER TABLE user_profiles
-    ADD COLUMN plan TEXT NOT NULL DEFAULT 'free',
+    ADD COLUMN plan TEXT NOT NULL DEFAULT 'free' CHECK (plan IN ('free', 'pro')),
     ADD COLUMN stripe_customer_id TEXT,
     ADD COLUMN stripe_subscription_id TEXT,
     ADD COLUMN subscription_status TEXT,
