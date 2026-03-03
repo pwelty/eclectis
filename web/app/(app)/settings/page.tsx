@@ -21,7 +21,6 @@ import {
   EyeOff,
   Key,
   Mail,
-  Rss,
   Sparkles,
   Clock,
   Loader2,
@@ -40,7 +39,6 @@ interface SettingsData {
     }
   } | null
   newsletterAddress: { address?: string } | null
-  feedHash: string | null
   email?: string
 }
 
@@ -92,7 +90,6 @@ export default function SettingsPage() {
           sendHour={data.profile.preferences?.briefing_send_hour ?? 7}
         />
         <NewsletterSection address={data.newsletterAddress?.address ?? ""} />
-        <RssFeedSection feedHash={data.feedHash} />
         <AccountSection email={data.email ?? ""} />
       </div>
     </div>
@@ -423,60 +420,6 @@ function NewsletterSection({ address }: { address: string }) {
       ) : (
         <p className="text-sm text-muted-foreground">
           No newsletter address configured.
-        </p>
-      )}
-    </Section>
-  )
-}
-
-// ── RSS feed section ───────────────────────────────────────────────────────
-
-function RssFeedSection({ feedHash }: { feedHash: string | null }) {
-  const [copied, setCopied] = useState(false)
-  const feedUrl = feedHash
-    ? `${typeof window !== "undefined" ? window.location.origin : ""}/api/feed/${feedHash}`
-    : null
-
-  const handleCopy = useCallback(async () => {
-    if (!feedUrl) return
-    await navigator.clipboard.writeText(feedUrl)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }, [feedUrl])
-
-  return (
-    <Section
-      icon={Rss}
-      title="Curated RSS feed"
-      description="Subscribe to this feed in Feedbin, Reeder, or any RSS reader."
-    >
-      {feedUrl ? (
-        <div className="flex items-center gap-2 rounded-lg border border-border bg-secondary/50 px-4 py-3">
-          <code className="flex-1 truncate font-mono text-sm text-foreground">
-            {feedUrl}
-          </code>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleCopy}
-            className="shrink-0"
-          >
-            {copied ? (
-              <>
-                <Check className="size-4 text-green-600" />
-                Copied!
-              </>
-            ) : (
-              <>
-                <Copy className="size-4" />
-                Copy
-              </>
-            )}
-          </Button>
-        </div>
-      ) : (
-        <p className="text-sm text-muted-foreground">
-          RSS feed URL will be available once your newsletter address is set up.
         </p>
       )}
     </Section>

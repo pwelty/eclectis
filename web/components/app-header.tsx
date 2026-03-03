@@ -8,19 +8,39 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import {
+  Newspaper,
   Rss,
   Search,
-  Lightbulb,
+  Send,
   Settings,
-  Newspaper,
 } from "lucide-react"
 
-const NAV_ITEMS = [
-  { href: "/articles", label: "Articles", icon: Newspaper },
-  { href: "/feeds", label: "Feeds", icon: Rss },
-  { href: "/search-terms", label: "Discovery", icon: Search },
-  { href: "/ideas", label: "Ideas", icon: Lightbulb },
-  { href: "/settings", label: "Settings", icon: Settings },
+const NAV_GROUPS = [
+  {
+    label: "Reading",
+    items: [
+      { href: "/articles", label: "Articles", icon: Newspaper },
+    ],
+  },
+  {
+    label: "Sources",
+    items: [
+      { href: "/feeds", label: "Feeds", icon: Rss },
+      { href: "/search-terms", label: "Discovery", icon: Search },
+    ],
+  },
+  {
+    label: "Publishing",
+    items: [
+      { href: "/publishing", label: "Outputs", icon: Send },
+    ],
+  },
+  {
+    label: "",
+    items: [
+      { href: "/settings", label: "Settings", icon: Settings },
+    ],
+  },
 ] as const
 
 export function AppHeader({ email }: { email: string }) {
@@ -98,27 +118,38 @@ export function AppHeader({ email }: { email: string }) {
       {/* Mobile navigation overlay */}
       {mobileNavOpen && (
         <nav className="border-b border-border bg-background px-4 py-2 md:hidden">
-          <ul className="space-y-0.5">
-            {NAV_ITEMS.map((item) => {
-              const isActive = pathname === item.href
-              return (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    className={cn(
-                      "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                      isActive
-                        ? "bg-muted text-foreground"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                    )}
-                  >
-                    <item.icon className="size-4" />
-                    {item.label}
-                  </Link>
-                </li>
-              )
-            })}
-          </ul>
+          <div className="space-y-3">
+            {NAV_GROUPS.map((group) => (
+              <div key={group.label || "ungrouped"}>
+                {group.label && (
+                  <p className="mb-1 px-3 text-xs font-medium uppercase tracking-wider text-muted-foreground/50">
+                    {group.label}
+                  </p>
+                )}
+                <ul className="space-y-0.5">
+                  {group.items.map((item) => {
+                    const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
+                    return (
+                      <li key={item.href}>
+                        <Link
+                          href={item.href}
+                          className={cn(
+                            "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                            isActive
+                              ? "bg-muted text-foreground"
+                              : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                          )}
+                        >
+                          <item.icon className="size-4" />
+                          {item.label}
+                        </Link>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            ))}
+          </div>
         </nav>
       )}
     </>
