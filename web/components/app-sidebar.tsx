@@ -16,6 +16,7 @@ const NAV_ITEMS = [
   { href: "/feeds", label: "Feeds", icon: Rss },
   { href: "/search-terms", label: "Discovery", icon: Search },
   { href: "/ideas", label: "Ideas", icon: Lightbulb },
+  { href: "/settings", label: "Settings", icon: Settings },
 ] as const
 
 export function AppSidebar() {
@@ -55,21 +56,6 @@ export function AppSidebar() {
         </ul>
       </nav>
 
-      {/* Settings at bottom */}
-      <div className="border-t border-sidebar-border px-3 py-2">
-        <Link
-          href="/settings"
-          className={cn(
-            "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-            pathname === "/settings"
-              ? "bg-sidebar-accent text-sidebar-accent-foreground"
-              : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
-          )}
-        >
-          <Settings className="size-4" />
-          Settings
-        </Link>
-      </div>
     </aside>
   )
 }
