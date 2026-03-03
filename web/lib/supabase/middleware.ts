@@ -58,7 +58,7 @@ export async function updateSession(request: NextRequest) {
   const isAuthRoute = pathname === "/login" || pathname === "/signup" || pathname === "/reset-password"
   if (user && isAuthRoute) {
     const url = request.nextUrl.clone()
-    url.pathname = "/dashboard"
+    url.pathname = "/onboarding"
     const redirectResponse = NextResponse.redirect(url)
     supabaseResponse.cookies.getAll().forEach((cookie) => {
       redirectResponse.cookies.set(cookie.name, cookie.value, cookie)
