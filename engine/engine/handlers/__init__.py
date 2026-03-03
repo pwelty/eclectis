@@ -28,3 +28,4 @@ from engine.handlers import ping  # noqa: E402, F401
 from engine.handlers import rss_scan  # noqa: E402, F401
 from engine.handlers import google_search_scan  # noqa: E402, F401
 from engine.handlers import article_fetch  # noqa: E402, F401
+from engine.handlers import briefing_generate  # noqa: E402, F401
