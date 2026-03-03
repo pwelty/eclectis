@@ -17,6 +17,7 @@ import {
 import {
   Check,
   Copy,
+  CreditCard,
   Eye,
   EyeOff,
   Key,
@@ -25,6 +26,8 @@ import {
   Clock,
   Loader2,
   AlertTriangle,
+  Crown,
+  ExternalLink,
 } from "lucide-react"
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -40,6 +43,10 @@ interface SettingsData {
   } | null
   newsletterAddress: { address?: string } | null
   email?: string
+  plan?: string
+  subscriptionStatus?: string | null
+  currentPeriodEnd?: string | null
+  hasStripeCustomer?: boolean
 }
 
 // ── Main settings page ─────────────────────────────────────────────────────
@@ -83,8 +90,14 @@ export default function SettingsPage() {
       </p>
 
       <div className="mt-8 space-y-10">
+        <BillingSection
+          plan={data.plan ?? "free"}
+          subscriptionStatus={data.subscriptionStatus ?? null}
+          currentPeriodEnd={data.currentPeriodEnd ?? null}
+          hasStripeCustomer={data.hasStripeCustomer ?? false}
+        />
         <InterestsSection interests={data.profile.interests ?? ""} />
-        <ApiKeySection hasKey={!!data.profile.api_key} />
+        <ApiKeySection hasKey={!!data.profile.api_key} plan={data.plan ?? "free"} />
         <BriefingSection
           frequency={data.profile.preferences?.briefing_frequency ?? "daily"}
           sendHour={data.profile.preferences?.briefing_send_hour ?? 7}
@@ -122,6 +135,118 @@ function Section({
       </div>
       <div className="ml-12">{children}</div>
     </section>
+  )
+}
+
+// ── Billing section ───────────────────────────────────────────────────────
+
+function BillingSection({
+  plan,
+  subscriptionStatus,
+  currentPeriodEnd,
+  hasStripeCustomer,
+}: {
+  plan: string
+  subscriptionStatus: string | null
+  currentPeriodEnd: string | null
+  hasStripeCustomer: boolean
+}) {
+  const [loading, setLoading] = useState(false)
+  const isPro = plan === "pro"
+
+  const handleUpgrade = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await fetch("/api/checkout", { method: "POST" })
+      const data = await res.json()
+      if (data.url) {
+        window.location.href = data.url
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const handleManage = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await fetch("/api/billing/portal", { method: "POST" })
+      const data = await res.json()
+      if (data.url) {
+        window.location.href = data.url
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  return (
+    <Section
+      icon={CreditCard}
+      title="Plan & billing"
+      description={isPro ? "You're on the Pro plan." : "You're on the free plan."}
+    >
+      {isPro ? (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-50 px-4 py-3 dark:bg-amber-950/20">
+            <Crown className="size-4 text-amber-600" />
+            <span className="text-sm font-medium text-foreground">Pro</span>
+            {subscriptionStatus && (
+              <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                {subscriptionStatus}
+              </span>
+            )}
+            {currentPeriodEnd && (
+              <span className="ml-auto text-xs text-muted-foreground">
+                Renews {new Date(currentPeriodEnd).toLocaleDateString()}
+              </span>
+            )}
+          </div>
+          {hasStripeCustomer && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleManage}
+              disabled={loading}
+            >
+              {loading ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <ExternalLink className="size-4" />
+              )}
+              Manage subscription
+            </Button>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div className="rounded-lg border border-border bg-secondary/50 px-4 py-3">
+            <div className="flex items-baseline justify-between">
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  Upgrade to Pro — $8/mo
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  We cover AI costs, unlimited feeds, email briefings, and more.
+                </p>
+              </div>
+            </div>
+          </div>
+          <Button
+            onClick={handleUpgrade}
+            disabled={loading}
+            size="sm"
+          >
+            {loading ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Crown className="size-4" />
+            )}
+            Upgrade to Pro
+          </Button>
+        </div>
+      )}
+    </Section>
   )
 }
 
@@ -177,7 +302,7 @@ function InterestsSection({ interests: initial }: { interests: string }) {
 
 // ── API key section ────────────────────────────────────────────────────────
 
-function ApiKeySection({ hasKey: initialHasKey }: { hasKey: boolean }) {
+function ApiKeySection({ hasKey: initialHasKey, plan }: { hasKey: boolean; plan: string }) {
   const [hasKey, setHasKey] = useState(initialHasKey)
   const [keyInput, setKeyInput] = useState("")
   const [showKey, setShowKey] = useState(false)
@@ -215,7 +340,10 @@ function ApiKeySection({ hasKey: initialHasKey }: { hasKey: boolean }) {
     <Section
       icon={Key}
       title="API key"
-      description="Bring your own Anthropic API key for the free tier. Pro subscribers use our keys."
+      description={plan === "pro"
+        ? "Pro plan uses our API keys. You can still add your own if preferred."
+        : "Required on the free tier. Bring your own Anthropic API key."
+      }
     >
       {hasKey ? (
         <div className="space-y-3">

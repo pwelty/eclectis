@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 import { createServerClient, getUser } from "@/lib/supabase/server"
+import { getPlanLimits } from "@/lib/plans"
 
 // ── Get settings data ──────────────────────────────────────────────────────
 
@@ -22,6 +23,10 @@ export async function getSettings() {
     newsletterAddress: addressRes.data,
     feedHash,
     email: user.email,
+    plan: profileRes.data?.plan ?? "free",
+    subscriptionStatus: profileRes.data?.subscription_status ?? null,
+    currentPeriodEnd: profileRes.data?.current_period_end ?? null,
+    hasStripeCustomer: !!profileRes.data?.stripe_customer_id,
   }
 }
 
@@ -90,6 +95,20 @@ export async function updateBriefingPreferences(formData: FormData) {
 
   const frequency = formData.get("frequency") as string
   const sendHour = parseInt(formData.get("send_hour") as string, 10)
+
+  // Gate briefings to Pro plan
+  if (frequency !== "off") {
+    const { data: profile } = await supabase
+      .from("user_profiles")
+      .select("plan")
+      .eq("id", user.id)
+      .single()
+
+    const limits = getPlanLimits(profile?.plan ?? "free")
+    if (!limits.emailBriefings) {
+      return { error: "Email briefings require the Pro plan." }
+    }
+  }
 
   // Get current preferences
   const { data: profile } = await supabase
