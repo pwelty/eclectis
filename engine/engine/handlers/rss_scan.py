@@ -15,6 +15,7 @@ from engine import db
 from engine.config import settings
 from engine.handlers import register
 from engine.services.claude import chat, extract_json_array
+from engine.services.usage import log_usage
 
 log = structlog.get_logger()
 
@@ -112,6 +113,14 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
         batch = new_posts[i : i + BATCH_SIZE]
         results, usage = await asyncio.to_thread(_filter_with_claude, batch, interests, ratings_context)
         total_tokens += usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
+        if usage:
+            await log_usage(
+                user_id=user_id,
+                model=usage.get("model", settings.haiku_model),
+                input_tokens=usage.get("input_tokens", 0),
+                output_tokens=usage.get("output_tokens", 0),
+                source="rss_scan",
+            )
 
         for idx, result in enumerate(results):
             score = result.get("score")

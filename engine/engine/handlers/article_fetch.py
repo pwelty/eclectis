@@ -14,6 +14,7 @@ from engine import db
 from engine.config import settings
 from engine.handlers import register
 from engine.services.claude import achat
+from engine.services.usage import log_usage
 
 log = structlog.get_logger()
 
@@ -206,6 +207,13 @@ Article text:
         try:
             summary_text, _usage = await achat(
                 prompt, max_tokens=1500, model=settings.haiku_model,
+            )
+            await log_usage(
+                user_id=user_id,
+                model=_usage.get("model", settings.haiku_model),
+                input_tokens=_usage.get("input_tokens", 0),
+                output_tokens=_usage.get("output_tokens", 0),
+                source="article_fetch",
             )
             if summary_text:
                 await db.execute(

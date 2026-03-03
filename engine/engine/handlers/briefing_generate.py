@@ -14,6 +14,7 @@ from engine.config import settings
 from engine.handlers import register
 from engine.services.claude import chat, extract_json_object
 from engine.services.email import send_email
+from engine.services.usage import log_usage
 
 log = structlog.get_logger()
 
@@ -74,13 +75,21 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
         )
 
     # Generate briefing with Claude
-    briefing_data = await asyncio.to_thread(
+    briefing_data, briefing_usage = await asyncio.to_thread(
         _generate_briefing,
         "\n\n".join(articles_text),
         interests,
         user_name,
         len(articles),
     )
+    if briefing_usage:
+        await log_usage(
+            user_id=user_id,
+            model=briefing_usage.get("model", settings.haiku_model),
+            input_tokens=briefing_usage.get("input_tokens", 0),
+            output_tokens=briefing_usage.get("output_tokens", 0),
+            source="briefing_generate",
+        )
 
     if not briefing_data:
         return {"status": "error", "reason": "Claude failed to generate briefing"}
@@ -113,7 +122,7 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
     return {"briefing_id": str(briefing_id), "sent": sent, "articles": len(articles)}
 
 
-def _generate_briefing(articles_text: str, interests: str, user_name: str, article_count: int) -> dict | None:
+def _generate_briefing(articles_text: str, interests: str, user_name: str, article_count: int) -> tuple[dict | None, dict]:
     greeting = f"Hi {user_name}" if user_name else "Hi"
 
     prompt = f"""Generate a daily intelligence briefing email from these curated articles.
@@ -151,10 +160,10 @@ Return ONLY the JSON object."""
 
     try:
         text, usage = chat(prompt, max_tokens=4000, model=settings.haiku_model)
-        return extract_json_object(text)
+        return extract_json_object(text), usage
     except Exception as exc:
         log.error("briefing.claude_error", error=str(exc))
-        return None
+        return None, {}
 
 
 def _render_html(data: dict, articles: list, user_name: str) -> str:
