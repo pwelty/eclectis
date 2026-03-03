@@ -1,0 +1,35 @@
+# IDE and editor files
+/.vscode
+/.idea
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Local environment files at root
+/.env.local
+/.env.*.local
+
+# Web app (in web/ subdirectory)
+/web/.env.local
+/web/.env.*.local
+/web/.next/
+/web/node_modules/
+
+# Engine (in engine/ subdirectory)
+/engine/.env
+/engine/.env.*
+!engine/.env.example
+/engine/__pycache__/
+/engine/**/__pycache__/
+/engine/*.egg-info/
+/engine/.venv/
+
+# Supabase
+/supabase/.temp/
+
+# Vercel
+.vercel
+
+# Local database backups
+/backups/
