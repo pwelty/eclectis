@@ -41,7 +41,7 @@ export async function signUp(formData: FormData) {
   }
 
   revalidatePath("/", "layout")
-  redirect("/articles")
+  redirect("/onboarding")
 }
 
 export async function signOut() {
