@@ -25,3 +25,4 @@ def get_handler(command_type: str) -> HandlerFn | None:
 
 # Import all handler modules so they self-register
 from engine.handlers import ping  # noqa: E402, F401
+from engine.handlers import rss_scan  # noqa: E402, F401
