@@ -7,6 +7,7 @@ import json
 import re
 from contextlib import asynccontextmanager
 
+import sentry_sdk
 import structlog
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -16,6 +17,15 @@ from engine.config import settings
 from engine.db import close_pool, get_pool
 from engine.poller import poll_loop
 from engine.scheduler import configure_scheduler, scheduler
+from engine.services.analytics import shutdown as shutdown_analytics
+
+if settings.sentry_dsn:
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        traces_sample_rate=1.0,
+        environment=settings.environment,
+        send_default_pii=False,
+    )
 
 structlog.configure(
     processors=[
@@ -45,6 +55,7 @@ async def lifespan(app: FastAPI):
     log.info("engine.shutting_down")
     poller_task.cancel()
     scheduler.shutdown(wait=False)
+    shutdown_analytics()
     await close_pool()
 
 

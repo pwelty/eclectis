@@ -7,6 +7,7 @@ import { signIn } from "@/actions/auth"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
+import { trackLogin } from "@/lib/analytics"
 
 function LoginForm() {
   const [error, setError] = useState<string | null>(null)
@@ -22,6 +23,8 @@ function LoginForm() {
     if (result?.error) {
       setError(result.error)
       setLoading(false)
+    } else {
+      trackLogin()
     }
   }
 

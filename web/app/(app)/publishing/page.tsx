@@ -10,6 +10,7 @@ import {
   Mic,
   Loader2,
 } from "lucide-react"
+import { trackRssFeedUrlCopied } from "@/lib/analytics"
 
 export default function PublishingPage() {
   const [feedHash, setFeedHash] = useState<string | null>(null)
@@ -98,6 +99,7 @@ function RssFeedOutput({ feedHash }: { feedHash: string | null }) {
   const handleCopy = useCallback(async () => {
     if (!feedUrl) return
     await navigator.clipboard.writeText(feedUrl)
+    trackRssFeedUrlCopied()
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }, [feedUrl])

@@ -24,6 +24,7 @@ import {
   ArrowLeft,
   Loader2,
 } from "lucide-react"
+import { trackSearchTermAdded, trackSearchTermRemoved } from "@/lib/analytics"
 
 // ── Main page ──────────────────────────────────────────────────────────────
 
@@ -97,6 +98,7 @@ export default function SearchTermsPage() {
       })
       setNewTerm("")
       addInputRef.current?.focus()
+      trackSearchTermAdded()
     }
     setAdding(false)
   }, [newTerm])
@@ -168,6 +170,7 @@ export default function SearchTermsPage() {
     } else {
       setTerms((prev) => prev.filter((t) => t.id !== termId))
       setDeletingId(null)
+      trackSearchTermRemoved()
     }
   }, [])
 

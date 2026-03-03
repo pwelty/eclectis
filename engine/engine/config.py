@@ -21,9 +21,16 @@ class Settings(BaseSettings):
     briefing_from_email: str = "briefing@eclectis.io"
     briefing_from_name: str = "Eclectis"
 
+    # Analytics
+    posthog_api_key: str = ""
+    posthog_host: str = "https://us.i.posthog.com"
+
     # Engine tuning
     command_poll_interval: int = 5
     log_level: str = "INFO"
+
+    # Sentry
+    sentry_dsn: str = ""
 
     # Environment
     environment: str = "dev"

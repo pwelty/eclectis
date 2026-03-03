@@ -6,6 +6,7 @@ import { signUp } from "@/actions/auth"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
+import { trackSignup } from "@/lib/analytics"
 
 export default function SignupPage() {
   const [error, setError] = useState<string | null>(null)
@@ -18,6 +19,8 @@ export default function SignupPage() {
     if (result?.error) {
       setError(result.error)
       setLoading(false)
+    } else {
+      trackSignup()
     }
   }
 

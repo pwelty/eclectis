@@ -27,6 +27,14 @@ import {
   Mail,
   Sparkles,
 } from "lucide-react"
+import {
+  trackOnboardingStep,
+  trackOnboardingComplete,
+  trackFeedAdded,
+  trackFeedRemoved,
+  trackSearchTermAdded,
+  trackSearchTermRemoved,
+} from "@/lib/analytics"
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -131,6 +139,7 @@ export default function OnboardingPage() {
     } else if (result.feed) {
       setFeeds((prev) => [...prev, result.feed as Feed])
       setFeedUrl("")
+      trackFeedAdded()
     }
     setAddingFeed(false)
   }, [feedUrl])
@@ -139,6 +148,7 @@ export default function OnboardingPage() {
     const result = await removeFeed(feedId)
     if (!result.error) {
       setFeeds((prev) => prev.filter((f) => f.id !== feedId))
+      trackFeedRemoved()
     }
   }, [])
 
@@ -201,6 +211,7 @@ export default function OnboardingPage() {
     } else if (result.term) {
       setSearchTerms((prev) => [...prev, result.term as SearchTermItem])
       setTermInput("")
+      trackSearchTermAdded()
     }
     setAddingTerm(false)
   }, [termInput])
@@ -209,6 +220,7 @@ export default function OnboardingPage() {
     const result = await removeSearchTerm(termId)
     if (!result.error) {
       setSearchTerms((prev) => prev.filter((t) => t.id !== termId))
+      trackSearchTermRemoved()
     }
   }, [])
 
@@ -223,6 +235,7 @@ export default function OnboardingPage() {
 
   const handleComplete = useCallback(async () => {
     setCompleting(true)
+    trackOnboardingComplete()
     await completeOnboarding()
     // completeOnboarding redirects, so we only reach here on error
     setCompleting(false)
@@ -235,6 +248,8 @@ export default function OnboardingPage() {
     if (step === 1 && interests.trim()) {
       await handleSaveInterests()
     }
+    const stepName = STEPS[step - 1]?.label ?? `Step ${step}`
+    trackOnboardingStep(step, stepName)
     setStep((s) => Math.min(s + 1, 4))
   }, [step, interests, handleSaveInterests])
 

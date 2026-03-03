@@ -27,6 +27,7 @@ import {
   ChevronLeft,
 } from "lucide-react"
 import Link from "next/link"
+import { trackFeedAdded, trackFeedRemoved } from "@/lib/analytics"
 
 // ── Type badge config ───────────────────────────────────────────────────
 
@@ -123,6 +124,7 @@ export default function FeedsPage() {
       setFeedUrl("")
       setFeedName("")
       setFeedType("rss")
+      trackFeedAdded(feedType)
     }
     setAddingFeed(false)
   }, [feedUrl, feedName, feedType])
@@ -180,6 +182,7 @@ export default function FeedsPage() {
     const result = await deleteFeed(feedId)
     if (!result.error) {
       setFeeds((prev) => prev.filter((f) => f.id !== feedId))
+      trackFeedRemoved()
     }
     setDeletingId(null)
   }, [])

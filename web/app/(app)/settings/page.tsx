@@ -26,6 +26,7 @@ import {
   Loader2,
   AlertTriangle,
 } from "lucide-react"
+import { trackSettingsChanged } from "@/lib/analytics"
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -139,6 +140,7 @@ function InterestsSection({ interests: initial }: { interests: string }) {
     const result = await updateInterests(formData)
     setSaving(false)
     if (result.success) {
+      trackSettingsChanged("interests")
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     }
@@ -198,6 +200,7 @@ function ApiKeySection({ hasKey: initialHasKey }: { hasKey: boolean }) {
     } else {
       setHasKey(true)
       setKeyInput("")
+      trackSettingsChanged("api_key")
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     }
@@ -301,6 +304,7 @@ function BriefingSection({
     const result = await updateBriefingPreferences(formData)
     setSaving(false)
     if (result.success) {
+      trackSettingsChanged("briefing_preferences")
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     }

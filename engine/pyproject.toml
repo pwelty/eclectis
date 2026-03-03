@@ -17,6 +17,7 @@ dependencies = [
     "structlog>=24.4",
     "html2text>=2024.2",
     "apscheduler>=3.10,<4",
+    "posthog>=3.7",
 ]
 
 [project.optional-dependencies]

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { getArticles, vote, toggleBookmark, markAsRead } from "@/actions/articles"
+import { trackArticleViewed, trackArticleVoted } from "@/lib/analytics"
 import {
   ThumbsUp,
   ThumbsDown,
@@ -108,6 +109,7 @@ export default function ArticlesPage() {
           return { ...a, userVote: newVote }
         })
       )
+      trackArticleVoted(articleId, direction)
       await vote(articleId, direction)
     },
     []
@@ -128,6 +130,7 @@ export default function ArticlesPage() {
   // ── Click-through (mark as read) ──────────────────────────────────────
 
   const handleClickThrough = useCallback(async (articleId: string) => {
+    trackArticleViewed(articleId)
     setArticles((prev) =>
       prev.map((a) => {
         if (a.id !== articleId) return a
