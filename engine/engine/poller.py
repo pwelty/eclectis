@@ -42,7 +42,7 @@ async def cleanup_stuck_commands() -> None:
     async with pool.acquire() as conn:
         stuck_rows = await conn.fetch(
             """
-            SELECT id, type, user_id, attempts, max_attempts, payload, updated_at
+            SELECT id, type, user_id, attempt_count, max_attempts, payload, updated_at
             FROM commands
             WHERE status = 'processing'
               AND updated_at < $1
@@ -63,44 +63,29 @@ async def cleanup_stuck_commands() -> None:
                 stuck_since=str(row["updated_at"]),
             )
 
-            if row["attempts"] < row["max_attempts"]:
+            if row["attempt_count"] < row["max_attempts"]:
                 await conn.execute(
-                    "UPDATE commands SET status = 'pending', error_message = $2, updated_at = $3 WHERE id = $1",
+                    "UPDATE commands SET status = 'pending', error = $2, updated_at = $3 WHERE id = $1",
                     cmd_id,
                     "Reset from stuck processing state (timeout)",
                     now,
                 )
                 bound.warning(
                     "stuck_command.reset_to_pending",
-                    attempts=row["attempts"],
+                    attempt_count=row["attempt_count"],
                     max_attempts=row["max_attempts"],
                 )
             else:
                 error_msg = "Command timed out in processing state after all retry attempts"
                 await conn.execute(
-                    "UPDATE commands SET status = 'failed', error_message = $2, completed_at = $3, updated_at = $3 WHERE id = $1",
+                    "UPDATE commands SET status = 'failed', error = $2, completed_at = $3, updated_at = $3 WHERE id = $1",
                     cmd_id,
                     error_msg,
                     now,
                 )
-                payload = row["payload"]
-                if isinstance(payload, str):
-                    payload_json = payload
-                else:
-                    payload_json = json.dumps(payload) if payload else "{}"
-                await conn.execute(
-                    """
-                    INSERT INTO dead_letters (command_id, error_message, error_details, original_payload)
-                    VALUES ($1, $2, $3, $4)
-                    """,
-                    cmd_id,
-                    error_msg,
-                    json.dumps({"reason": "stuck_command_timeout", "stuck_since": str(row["updated_at"])}),
-                    payload_json,
-                )
                 bound.error(
                     "stuck_command.failed_permanently",
-                    attempts=row["attempts"],
+                    attempt_count=row["attempt_count"],
                     max_attempts=row["max_attempts"],
                 )
 
@@ -124,8 +109,7 @@ async def poll_once() -> None:
                 """
                 SELECT * FROM commands
                 WHERE status = 'pending'
-                  AND attempts < max_attempts
-                  AND (scheduled_at IS NULL OR scheduled_at <= NOW())
+                  AND attempt_count < max_attempts
                 ORDER BY created_at
                 LIMIT 5
                 FOR UPDATE SKIP LOCKED
@@ -134,7 +118,7 @@ async def poll_once() -> None:
             now = datetime.now(timezone.utc)
             for row in rows:
                 await conn.execute(
-                    "UPDATE commands SET status = 'processing', started_at = $2, attempts = attempts + 1, updated_at = $2 WHERE id = $1",
+                    "UPDATE commands SET status = 'processing', started_at = $2, attempt_count = attempt_count + 1, updated_at = $2 WHERE id = $1",
                     row["id"],
                     now,
                 )
@@ -184,32 +168,23 @@ async def _process_command(row: dict) -> None:
 
 async def _fail_command(command_id, error_msg: str, payload, details: str | None = None) -> None:
     """Handle a failed command: retry or write to dead letters."""
-    row = await db.fetchrow("SELECT attempts, max_attempts FROM commands WHERE id = $1", command_id)
+    row = await db.fetchrow("SELECT attempt_count, max_attempts FROM commands WHERE id = $1", command_id)
     if not row:
         return
 
     now = datetime.now(timezone.utc)
-    if row["attempts"] >= row["max_attempts"]:
+    if row["attempt_count"] >= row["max_attempts"]:
         await db.execute(
-            "UPDATE commands SET status = 'failed', error_message = $2, completed_at = $3, updated_at = $3 WHERE id = $1",
+            "UPDATE commands SET status = 'failed', error = $2, completed_at = $3, updated_at = $3 WHERE id = $1",
             command_id,
             error_msg,
             now,
         )
-        await db.execute(
-            """
-            INSERT INTO dead_letters (command_id, error_message, error_details, original_payload)
-            VALUES ($1, $2, $3, $4)
-            """,
-            command_id,
-            error_msg,
-            json.dumps({"traceback": details}) if details else None,
-            json.dumps(payload),
-        )
+        log.error("command.dead_letter", command_id=str(command_id), error=error_msg)
     else:
         # Return to pending for retry
         await db.execute(
-            "UPDATE commands SET status = 'pending', error_message = $2, updated_at = $3 WHERE id = $1",
+            "UPDATE commands SET status = 'pending', error = $2, updated_at = $3 WHERE id = $1",
             command_id,
             error_msg,
             now,
