@@ -30,13 +30,11 @@ The engine's core value — discover, score, and fetch content. No web UI for ma
 - Google search scanning handler
 - AI scoring with Claude Haiku (interests-based prompt, vote calibration)
 - Article fetch + summarize (ScrapingBee, escalation strategy)
-- Article enrichment (tags, metadata)
-- Idea generation (cluster articles into themes)
-- Daily pipeline scheduler (orchestrate scan → score → fetch → ideas)
+- Briefing generation (daily email digest via Claude + Brevo)
 - Newsletter inbound webhook (Brevo → engine → parse → score)
 - DNS setup for `in.eclectis.io`
 
-**Done when:** You can seed a user with feeds and search terms, run the pipeline, and see scored/summarized articles in the database.
+**Done when:** You can seed a user with feeds and search terms, run scans, and see scored/summarized articles in the database. Briefing can be generated on demand.
 
 ## Milestone 3: Web app
 
@@ -46,9 +44,7 @@ The user-facing product — everything a user needs to set up their curation and
 - Feed management (add/edit/remove RSS, podcast, newsletter sources, OPML import)
 - Search term management (add/edit/remove discovery terms)
 - Articles view (scored articles, vote thumbs up/down)
-- Ideas view (article clusters/themes)
 - Curated RSS feed endpoint (/feed.xml — XML generation from top-scored articles)
-- Email briefing generation + delivery via Brevo
 - Briefing settings (frequency, preferences)
 - BYOK API key management (validate on save, store encrypted)
 - Settings page (interests, preferences, delivery)
@@ -84,12 +80,8 @@ Not everything goes through the command queue. Split:
 - `google.search_scan` — search discovery terms
 - `article.fetch_content` — scrape and summarize
 - `article.batch_fetch` — batch version
-- `article.enrich` — extract metadata
-- `idea.generate` — cluster articles into themes
 - `briefing.generate` — daily/weekly email digest
-- `feed.discovery` — find new feeds
 - `newsletter.process` — parse inbound email content
-- `daily.pipeline` — orchestrate scheduled scans
 
 ### RSS feed output
 

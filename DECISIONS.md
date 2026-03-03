@@ -18,6 +18,14 @@
 
 **Approach:** MX record on `in.eclectis.io` → Brevo → webhook POST to engine. Engine parses HTML, extracts content, scores and stores as article with `content_type: newsletter`.
 
+## 2026-03-03 — Descoped: idea generation, daily pipeline, article enrichment
+
+**Decision:** Remove idea generation, daily pipeline orchestrator, article enrichment, and feed discovery from v1.
+
+**Context:** These were carried over from Authexis but aren't core to Eclectis's value. The core loop is: scan → score → fetch content → briefing email. Ideas and enrichment add complexity without clear user value for a v1 consumer product.
+
+**What stays:** rss.scan, google_search.scan, article.fetch_content, article.batch_fetch, briefing.generate, newsletter.process. Scans triggered directly (no pipeline orchestrator). Briefing is standalone.
+
 ## 2026-03-03 — Visual design carried from old Eclectis
 
 **Decision:** Reuse the existing Eclectis design system (navy-slate brand, warm amber accent, shadcn, light + dark mode).

@@ -27,3 +27,4 @@ def get_handler(command_type: str) -> HandlerFn | None:
 from engine.handlers import ping  # noqa: E402, F401
 from engine.handlers import rss_scan  # noqa: E402, F401
 from engine.handlers import google_search_scan  # noqa: E402, F401
+from engine.handlers import article_fetch  # noqa: E402, F401
