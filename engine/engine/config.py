@@ -15,6 +15,7 @@ class Settings(BaseSettings):
 
     # External APIs
     serper_api_key: str = ""
+    scrapingbee_api_key: str = ""
 
     # Engine tuning
     command_poll_interval: int = 5
