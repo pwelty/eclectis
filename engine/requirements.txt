@@ -1,0 +1,13 @@
+fastapi>=0.115
+uvicorn[standard]>=0.34
+asyncpg>=0.30
+pydantic>=2.10
+pydantic-settings>=2.7
+anthropic>=0.43
+httpx[http2]>=0.28
+beautifulsoup4>=4.12
+lxml>=5.3
+feedparser>=6.0
+structlog>=24.4
+html2text>=2024.2
+apscheduler>=3.10,<4
