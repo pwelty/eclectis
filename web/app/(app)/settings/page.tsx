@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import React, { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -14,7 +14,9 @@ import {
   updateBriefingPreferences,
   updatePassword,
 } from "@/actions/settings"
+import { getUsageSummary, type UsageSummary } from "@/actions/usage"
 import {
+  Activity,
   Check,
   Copy,
   Eye,
@@ -46,12 +48,17 @@ interface SettingsData {
 
 export default function SettingsPage() {
   const [data, setData] = useState<SettingsData | null>(null)
+  const [usage, setUsage] = useState<UsageSummary | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function load() {
-      const result = await getSettings()
+      const [result, usageResult] = await Promise.all([
+        getSettings(),
+        getUsageSummary(),
+      ])
       setData(result as SettingsData)
+      setUsage(usageResult)
       setLoading(false)
     }
     load()
@@ -89,6 +96,7 @@ export default function SettingsPage() {
           frequency={data.profile.preferences?.briefing_frequency ?? "daily"}
           sendHour={data.profile.preferences?.briefing_send_hour ?? 7}
         />
+        <UsageSection usage={usage} />
         <NewsletterSection address={data.newsletterAddress?.address ?? ""} />
         <AccountSection email={data.email ?? ""} />
       </div>
@@ -370,6 +378,132 @@ function BriefingSection({
             </span>
           )}
         </div>
+      </div>
+    </Section>
+  )
+}
+
+// ── Usage section ──────────────────────────────────────────────────────────
+
+function formatCost(cost: number): string {
+  if (cost < 0.01) return `$${cost.toFixed(4)}`
+  return `$${cost.toFixed(2)}`
+}
+
+function formatTokens(tokens: number): string {
+  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`
+  if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1)}k`
+  return tokens.toLocaleString()
+}
+
+const SOURCE_LABELS: Record<string, string> = {
+  rss_scan: "RSS scoring",
+  google_search_scan: "Search scoring",
+  article_fetch: "Article summary",
+  briefing_generate: "Briefing",
+  newsletter_process: "Newsletter scoring",
+}
+
+function UsageSection({ usage }: { usage: UsageSummary | null }) {
+  if (!usage) {
+    return (
+      <Section
+        icon={Activity}
+        title="AI usage"
+        description="Track your Claude API token usage and costs."
+      >
+        <p className="text-sm text-muted-foreground">No usage data yet.</p>
+      </Section>
+    )
+  }
+
+  return (
+    <Section
+      icon={Activity}
+      title="AI usage"
+      description="Track your Claude API token usage and costs."
+    >
+      <div className="space-y-5">
+        {/* Summary cards */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-lg border border-border bg-secondary/50 px-4 py-3">
+            <p className="text-xs font-medium text-muted-foreground">Today</p>
+            <p className="mt-1 text-right font-mono text-lg font-semibold text-foreground">
+              {formatCost(usage.today.cost_usd)}
+            </p>
+            <p className="text-right text-xs text-muted-foreground">
+              {usage.today.calls} calls
+            </p>
+          </div>
+          <div className="rounded-lg border border-border bg-secondary/50 px-4 py-3">
+            <p className="text-xs font-medium text-muted-foreground">This month</p>
+            <p className="mt-1 text-right font-mono text-lg font-semibold text-foreground">
+              {formatCost(usage.month.cost_usd)}
+            </p>
+            <p className="text-right text-xs text-muted-foreground">
+              {usage.month.calls} calls
+            </p>
+          </div>
+        </div>
+
+        {/* Token totals */}
+        <div className="rounded-lg border border-border">
+          <div className="grid grid-cols-3 gap-px bg-border text-sm">
+            <div className="bg-secondary/50 px-3 py-2 font-medium text-muted-foreground">&nbsp;</div>
+            <div className="bg-secondary/50 px-3 py-2 text-right font-medium text-muted-foreground">Input</div>
+            <div className="bg-secondary/50 px-3 py-2 text-right font-medium text-muted-foreground">Output</div>
+            <div className="bg-card px-3 py-2 text-muted-foreground">Today</div>
+            <div className="bg-card px-3 py-2 text-right font-mono">{formatTokens(usage.today.input_tokens)}</div>
+            <div className="bg-card px-3 py-2 text-right font-mono">{formatTokens(usage.today.output_tokens)}</div>
+            <div className="bg-card px-3 py-2 text-muted-foreground">Month</div>
+            <div className="bg-card px-3 py-2 text-right font-mono">{formatTokens(usage.month.input_tokens)}</div>
+            <div className="bg-card px-3 py-2 text-right font-mono">{formatTokens(usage.month.output_tokens)}</div>
+          </div>
+        </div>
+
+        {/* Breakdown by source */}
+        {usage.bySource.length > 0 && (
+          <div>
+            <p className="mb-2 text-sm font-medium text-muted-foreground">Cost by handler</p>
+            <div className="rounded-lg border border-border">
+              <div className="grid grid-cols-3 gap-px bg-border text-sm">
+                <div className="bg-secondary/50 px-3 py-2 font-medium text-muted-foreground">Source</div>
+                <div className="bg-secondary/50 px-3 py-2 text-right font-medium text-muted-foreground">Calls</div>
+                <div className="bg-secondary/50 px-3 py-2 text-right font-medium text-muted-foreground">Cost</div>
+                {usage.bySource.map((row) => (
+                  <React.Fragment key={row.source}>
+                    <div className="bg-card px-3 py-2 text-muted-foreground">
+                      {SOURCE_LABELS[row.source] ?? row.source}
+                    </div>
+                    <div className="bg-card px-3 py-2 text-right font-mono">{row.calls}</div>
+                    <div className="bg-card px-3 py-2 text-right font-mono">{formatCost(row.cost_usd)}</div>
+                  </React.Fragment>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Daily breakdown */}
+        {usage.dailyBreakdown.length > 0 && (
+          <div>
+            <p className="mb-2 text-sm font-medium text-muted-foreground">Daily breakdown</p>
+            <div className="rounded-lg border border-border">
+              <div className="grid grid-cols-3 gap-px bg-border text-sm">
+                <div className="bg-secondary/50 px-3 py-2 font-medium text-muted-foreground">Date</div>
+                <div className="bg-secondary/50 px-3 py-2 text-right font-medium text-muted-foreground">Calls</div>
+                <div className="bg-secondary/50 px-3 py-2 text-right font-medium text-muted-foreground">Cost</div>
+                {usage.dailyBreakdown.map((row) => (
+                  <React.Fragment key={row.date}>
+                    <div className="bg-card px-3 py-2 text-muted-foreground">{row.date}</div>
+                    <div className="bg-card px-3 py-2 text-right font-mono">{row.calls}</div>
+                    <div className="bg-card px-3 py-2 text-right font-mono">{formatCost(row.cost_usd)}</div>
+                  </React.Fragment>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </Section>
   )
