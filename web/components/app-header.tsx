@@ -60,8 +60,8 @@ export function AppHeader({ email }: { email: string }) {
           )}
         </button>
 
-        {/* Mobile brand */}
-        <Link href="/articles" className="text-base font-semibold text-foreground md:hidden">
+        {/* Brand */}
+        <Link href="/articles" className="text-base font-semibold text-foreground">
           Eclectis
         </Link>
 

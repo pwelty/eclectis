@@ -24,15 +24,8 @@ export function AppSidebar() {
 
   return (
     <aside className="hidden w-56 shrink-0 border-r border-sidebar-border bg-sidebar md:flex md:flex-col">
-      {/* Brand */}
-      <div className="flex h-14 items-center px-5">
-        <Link href="/articles" className="text-lg font-semibold text-sidebar-primary-foreground">
-          Eclectis
-        </Link>
-      </div>
-
       {/* Navigation */}
-      <nav className="flex-1 px-3 py-2">
+      <nav className="flex-1 px-3 py-4">
         <ul className="space-y-0.5">
           {NAV_ITEMS.map((item) => {
             const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
