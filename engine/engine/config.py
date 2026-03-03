@@ -1,0 +1,31 @@
+"""Configuration — Pydantic Settings loaded from environment / .env."""
+
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings):
+    # Supabase
+    database_url: str = ""
+    supabase_url: str = ""
+    supabase_service_role_key: str = ""
+
+    # AI
+    anthropic_api_key: str = ""
+    haiku_model: str = "claude-haiku-4-5-20251001"
+
+    # Engine tuning
+    command_poll_interval: int = 5
+    log_level: str = "INFO"
+
+    # Environment
+    environment: str = "dev"
+
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+
+    @property
+    def scoring_model(self) -> str:
+        """Alias — scoring uses Haiku for cost efficiency."""
+        return self.haiku_model
+
+
+settings = Settings()

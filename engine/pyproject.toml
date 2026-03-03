@@ -16,6 +16,7 @@ dependencies = [
     "feedparser>=6.0",
     "structlog>=24.4",
     "html2text>=2024.2",
+    "apscheduler>=3.10,<4",
 ]
 
 [project.optional-dependencies]
