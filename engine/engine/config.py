@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     serper_api_key: str = ""
     scrapingbee_api_key: str = ""
     brevo_api_key: str = ""
+    brevo_webhook_secret: str = ""
     briefing_from_email: str = "briefing@eclectis.io"
     briefing_from_name: str = "Eclectis"
 
