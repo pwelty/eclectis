@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     haiku_model: str = "claude-haiku-4-5-20251001"
 
+    # External APIs
+    serper_api_key: str = ""
+
     # Engine tuning
     command_poll_interval: int = 5
     log_level: str = "INFO"
