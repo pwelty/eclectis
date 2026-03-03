@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 import { createServerClient, getUser } from "@/lib/supabase/server"
+import { getPlanLimits } from "@/lib/plans"
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -46,6 +47,25 @@ export async function addFeed(formData: FormData) {
   const type = (formData.get("type") as string)?.trim() || "rss"
 
   if (!url) return { feed: null, error: "URL is required" }
+
+  // Check plan feed limit
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("plan")
+    .eq("id", user.id)
+    .single()
+
+  const limits = getPlanLimits(profile?.plan ?? "free")
+  if (limits.maxFeeds !== Infinity) {
+    const { count } = await supabase
+      .from("feeds")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+
+    if ((count ?? 0) >= limits.maxFeeds) {
+      return { feed: null, error: `Free plan is limited to ${limits.maxFeeds} feeds. Upgrade to Pro for unlimited.` }
+    }
+  }
 
   const { data: feed, error } = await supabase
     .from("feeds")
@@ -180,6 +200,31 @@ export async function importOPML(formData: FormData) {
 
   if (feeds.length === 0) {
     return { imported: 0, failed: 0, error: "No feeds found in OPML file" }
+  }
+
+  // Check plan feed limit
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("plan")
+    .eq("id", user.id)
+    .single()
+
+  const limits = getPlanLimits(profile?.plan ?? "free")
+  if (limits.maxFeeds !== Infinity) {
+    const { count } = await supabase
+      .from("feeds")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+
+    const currentCount = count ?? 0
+    const remaining = limits.maxFeeds - currentCount
+    if (remaining <= 0) {
+      return { imported: 0, failed: 0, error: `Free plan is limited to ${limits.maxFeeds} feeds. Upgrade to Pro for unlimited.` }
+    }
+    // Truncate import to remaining slots
+    if (feeds.length > remaining) {
+      feeds.length = remaining
+    }
   }
 
   let imported = 0

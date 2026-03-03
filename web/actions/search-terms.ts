@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 import { createServerClient, getUser } from "@/lib/supabase/server"
+import { getPlanLimits } from "@/lib/plans"
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -45,6 +46,25 @@ export async function addSearchTerm(
 
   const term = (formData.get("term") as string)?.trim()
   if (!term) return { term: null, error: "Term is required" }
+
+  // Check plan search term limit
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("plan")
+    .eq("id", user.id)
+    .single()
+
+  const limits = getPlanLimits(profile?.plan ?? "free")
+  if (limits.maxSearchTerms !== Infinity) {
+    const { count } = await supabase
+      .from("search_terms")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+
+    if ((count ?? 0) >= limits.maxSearchTerms) {
+      return { term: null, error: `Free plan is limited to ${limits.maxSearchTerms} search terms. Upgrade to Pro for unlimited.` }
+    }
+  }
 
   const { data, error } = await supabase
     .from("search_terms")

@@ -17,6 +17,7 @@ import {
 import {
   Check,
   Copy,
+  CreditCard,
   Eye,
   EyeOff,
   Key,
@@ -25,6 +26,8 @@ import {
   Clock,
   Loader2,
   AlertTriangle,
+  Crown,
+  ExternalLink,
 } from "lucide-react"
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -40,6 +43,10 @@ interface SettingsData {
   } | null
   newsletterAddress: { address?: string } | null
   email?: string
+  plan?: string
+  subscriptionStatus?: string | null
+  currentPeriodEnd?: string | null
+  hasStripeCustomer?: boolean
 }
 
 // ── Main settings page ─────────────────────────────────────────────────────
@@ -83,11 +90,18 @@ export default function SettingsPage() {
       </p>
 
       <div className="mt-8 space-y-10">
+        <BillingSection
+          plan={data.plan ?? "free"}
+          subscriptionStatus={data.subscriptionStatus ?? null}
+          currentPeriodEnd={data.currentPeriodEnd ?? null}
+          hasStripeCustomer={data.hasStripeCustomer ?? false}
+        />
         <InterestsSection interests={data.profile.interests ?? ""} />
-        <ApiKeySection hasKey={!!data.profile.api_key} />
+        <ApiKeySection hasKey={!!data.profile.api_key} plan={data.plan ?? "free"} />
         <BriefingSection
           frequency={data.profile.preferences?.briefing_frequency ?? "daily"}
           sendHour={data.profile.preferences?.briefing_send_hour ?? 7}
+          plan={data.plan ?? "free"}
         />
         <NewsletterSection address={data.newsletterAddress?.address ?? ""} />
         <AccountSection email={data.email ?? ""} />
@@ -122,6 +136,135 @@ function Section({
       </div>
       <div className="ml-12">{children}</div>
     </section>
+  )
+}
+
+// ── Billing section ───────────────────────────────────────────────────────
+
+function BillingSection({
+  plan,
+  subscriptionStatus,
+  currentPeriodEnd,
+  hasStripeCustomer,
+}: {
+  plan: string
+  subscriptionStatus: string | null
+  currentPeriodEnd: string | null
+  hasStripeCustomer: boolean
+}) {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const isPro = plan === "pro"
+
+  const handleUpgrade = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch("/api/checkout", { method: "POST" })
+      const data = await res.json()
+      if (data.url) {
+        window.location.href = data.url
+      } else {
+        setError(data.error ?? "Something went wrong. Please try again.")
+      }
+    } catch {
+      setError("Could not connect. Please try again.")
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const handleManage = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch("/api/billing/portal", { method: "POST" })
+      const data = await res.json()
+      if (data.url) {
+        window.location.href = data.url
+      } else {
+        setError(data.error ?? "Something went wrong. Please try again.")
+      }
+    } catch {
+      setError("Could not connect. Please try again.")
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  return (
+    <Section
+      icon={CreditCard}
+      title="Plan & billing"
+      description={isPro ? "You're on the Pro plan." : "You're on the free plan."}
+    >
+      {isPro ? (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-50 px-4 py-3 dark:bg-amber-950/20">
+            <Crown className="size-4 text-amber-600" />
+            <span className="text-sm font-medium text-foreground">Pro</span>
+            {subscriptionStatus && (
+              <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                {subscriptionStatus}
+              </span>
+            )}
+            {currentPeriodEnd && (
+              <span className="ml-auto text-xs text-muted-foreground">
+                Renews {new Date(currentPeriodEnd).toLocaleDateString()}
+              </span>
+            )}
+          </div>
+          {hasStripeCustomer && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleManage}
+              disabled={loading}
+            >
+              {loading ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <ExternalLink className="size-4" />
+              )}
+              Manage subscription
+            </Button>
+          )}
+          {error && (
+            <p className="text-sm text-destructive">{error}</p>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div className="rounded-lg border border-border bg-secondary/50 px-4 py-3">
+            <div className="flex items-baseline justify-between">
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  Upgrade to Pro — $8/mo
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  We cover AI costs, unlimited feeds, email briefings, and more.
+                </p>
+              </div>
+            </div>
+          </div>
+          <Button
+            onClick={handleUpgrade}
+            disabled={loading}
+            size="sm"
+          >
+            {loading ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Crown className="size-4" />
+            )}
+            Upgrade to Pro
+          </Button>
+          {error && (
+            <p className="text-sm text-destructive">{error}</p>
+          )}
+        </div>
+      )}
+    </Section>
   )
 }
 
@@ -177,7 +320,7 @@ function InterestsSection({ interests: initial }: { interests: string }) {
 
 // ── API key section ────────────────────────────────────────────────────────
 
-function ApiKeySection({ hasKey: initialHasKey }: { hasKey: boolean }) {
+function ApiKeySection({ hasKey: initialHasKey, plan }: { hasKey: boolean; plan: string }) {
   const [hasKey, setHasKey] = useState(initialHasKey)
   const [keyInput, setKeyInput] = useState("")
   const [showKey, setShowKey] = useState(false)
@@ -215,7 +358,10 @@ function ApiKeySection({ hasKey: initialHasKey }: { hasKey: boolean }) {
     <Section
       icon={Key}
       title="API key"
-      description="Bring your own Anthropic API key for the free tier. Pro subscribers use our keys."
+      description={plan === "pro"
+        ? "Pro plan uses our API keys. You can still add your own if preferred."
+        : "Required on the free tier. Bring your own Anthropic API key."
+      }
     >
       {hasKey ? (
         <div className="space-y-3">
@@ -282,25 +428,32 @@ function ApiKeySection({ hasKey: initialHasKey }: { hasKey: boolean }) {
 function BriefingSection({
   frequency: initialFrequency,
   sendHour: initialSendHour,
+  plan,
 }: {
   frequency: string
   sendHour: number
+  plan: string
 }) {
-  const [frequency, setFrequency] = useState(initialFrequency)
+  const isFree = plan !== "pro"
+  const [frequency, setFrequency] = useState(isFree ? "off" : initialFrequency)
   const [sendHour, setSendHour] = useState(initialSendHour)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const hasChanges = frequency !== initialFrequency || sendHour !== initialSendHour
 
   const handleSave = useCallback(async () => {
     setSaving(true)
+    setError(null)
     const formData = new FormData()
     formData.set("frequency", frequency)
     formData.set("send_hour", String(sendHour))
     const result = await updateBriefingPreferences(formData)
     setSaving(false)
-    if (result.success) {
+    if (result.error) {
+      setError(result.error)
+    } else if (result.success) {
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     }
@@ -310,67 +463,81 @@ function BriefingSection({
     <Section
       icon={Clock}
       title="Email briefings"
-      description="Receive a curated digest of your top content."
+      description={isFree
+        ? "Curated digests are a Pro feature. Upgrade to enable."
+        : "Receive a curated digest of your top content."
+      }
     >
-      <div className="space-y-4">
-        <div className="space-y-2">
-          <Label className="text-sm">Frequency</Label>
-          <div className="flex gap-1 rounded-lg bg-muted p-1">
-            {(["daily", "weekly", "off"] as const).map((f) => (
-              <button
-                key={f}
-                onClick={() => setFrequency(f)}
-                className={cn(
-                  "rounded-md px-4 py-1.5 text-sm font-medium capitalize transition-colors",
-                  frequency === f
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {f}
-              </button>
-            ))}
-          </div>
+      {isFree ? (
+        <div className="rounded-lg border border-dashed border-border bg-muted/30 px-4 py-4 text-center">
+          <p className="text-sm text-muted-foreground">
+            Email briefings are available on the Pro plan.
+          </p>
         </div>
-
-        {frequency !== "off" && (
+      ) : (
+        <div className="space-y-4">
           <div className="space-y-2">
-            <Label className="text-sm">Send time</Label>
-            <select
-              value={sendHour}
-              onChange={(e) => setSendHour(parseInt(e.target.value, 10))}
-              className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
-            >
-              {Array.from({ length: 24 }, (_, i) => (
-                <option key={i} value={i}>
-                  {i === 0
-                    ? "12:00 AM"
-                    : i < 12
-                      ? `${i}:00 AM`
-                      : i === 12
-                        ? "12:00 PM"
-                        : `${i - 12}:00 PM`}
-                </option>
+            <Label className="text-sm">Frequency</Label>
+            <div className="flex gap-1 rounded-lg bg-muted p-1">
+              {(["daily", "weekly", "off"] as const).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setFrequency(f)}
+                  className={cn(
+                    "rounded-md px-4 py-1.5 text-sm font-medium capitalize transition-colors",
+                    frequency === f
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {f}
+                </button>
               ))}
-            </select>
+            </div>
           </div>
-        )}
 
-        <div className="flex items-center gap-3">
-          <Button
-            onClick={handleSave}
-            disabled={saving || !hasChanges}
-            size="sm"
-          >
-            {saving ? "Saving..." : "Save"}
-          </Button>
-          {saved && (
-            <span className="flex items-center gap-1 text-sm text-green-600">
-              <Check className="size-3.5" /> Saved
-            </span>
+          {frequency !== "off" && (
+            <div className="space-y-2">
+              <Label className="text-sm">Send time</Label>
+              <select
+                value={sendHour}
+                onChange={(e) => setSendHour(parseInt(e.target.value, 10))}
+                className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+              >
+                {Array.from({ length: 24 }, (_, i) => (
+                  <option key={i} value={i}>
+                    {i === 0
+                      ? "12:00 AM"
+                      : i < 12
+                        ? `${i}:00 AM`
+                        : i === 12
+                          ? "12:00 PM"
+                          : `${i - 12}:00 PM`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div className="flex items-center gap-3">
+            <Button
+              onClick={handleSave}
+              disabled={saving || !hasChanges}
+              size="sm"
+            >
+              {saving ? "Saving..." : "Save"}
+            </Button>
+            {saved && (
+              <span className="flex items-center gap-1 text-sm text-green-600">
+                <Check className="size-3.5" /> Saved
+              </span>
+            )}
+          </div>
+          {error && (
+            <p className="text-sm text-destructive">{error}</p>
           )}
         </div>
-      </div>
+      )}
     </Section>
   )
 }
