@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     command_poll_interval: int = 5
     log_level: str = "INFO"
 
+    # Sentry
+    sentry_dsn: str = ""
+
     # Environment
     environment: str = "dev"
 

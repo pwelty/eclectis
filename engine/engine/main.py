@@ -7,6 +7,7 @@ import json
 import re
 from contextlib import asynccontextmanager
 
+import sentry_sdk
 import structlog
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -16,6 +17,14 @@ from engine.config import settings
 from engine.db import close_pool, get_pool
 from engine.poller import poll_loop
 from engine.scheduler import configure_scheduler, scheduler
+
+if settings.sentry_dsn:
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        traces_sample_rate=1.0,
+        environment=settings.environment,
+        send_default_pii=False,
+    )
 
 structlog.configure(
     processors=[
