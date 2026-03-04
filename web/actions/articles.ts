@@ -33,9 +33,9 @@ export async function getArticles({
 
   // Sort
   if (sort === "newest") {
-    query = query.order("found_at", { ascending: false })
+    query = query.order("published_at", { ascending: false, nullsFirst: false })
   } else if (sort === "oldest") {
-    query = query.order("found_at", { ascending: true })
+    query = query.order("published_at", { ascending: true, nullsFirst: false })
   } else {
     // Default: score
     query = query
