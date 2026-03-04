@@ -17,6 +17,7 @@ from engine.handlers import register
 from engine.services.byok import resolve_api_key
 from engine.services.claude import chat, extract_json_object
 from engine.services.usage import log_usage
+from engine.url import normalize_url
 
 log = structlog.get_logger()
 
@@ -203,6 +204,7 @@ async def search_google(client: httpx.AsyncClient, query: str) -> list[dict]:
         title = item.get("title", "").strip()
         if not url or not title:
             continue
+        url = normalize_url(url)
         results.append({
             "title": title[:255],
             "url": url,
