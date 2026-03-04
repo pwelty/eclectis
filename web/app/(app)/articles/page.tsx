@@ -228,7 +228,7 @@ export default function ArticlesPage() {
       {/* Article list */}
       {!loading && articles.length > 0 && (
         <div className="space-y-3">
-          {articles.map((article) => (
+          {articles.filter((article, i, arr) => arr.findIndex((a) => a.id === article.id) === i).map((article) => (
             <ArticleCard
               key={article.id}
               article={article}
