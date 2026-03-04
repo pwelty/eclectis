@@ -15,6 +15,21 @@ export interface Feed {
   active: boolean
   last_scanned_at: string | null
   created_at: string
+  sender_email?: string | null
+}
+
+export interface Article {
+  id: string
+  title: string
+  url: string
+  ai_score: number | null
+  ai_reason: string | null
+  summary: string | null
+  content_type: string
+  status: string
+  tags: string[]
+  found_at: string
+  published_at: string | null
 }
 
 // ── Get feeds ───────────────────────────────────────────────────────────
@@ -302,4 +317,36 @@ export async function importOPML(formData: FormData) {
   revalidatePath("/newsletters")
   revalidatePath("/podcasts")
   return { imported, failed }
+}
+
+// ── Get feed with articles ─────────────────────────────────────────────
+
+export async function getFeedWithArticles(feedId: string): Promise<{
+  feed: Feed | null
+  articles: Article[]
+  error?: string
+}> {
+  const supabase = await createServerClient()
+  const user = await getUser()
+  if (!user) return { feed: null, articles: [], error: "Not authenticated" }
+
+  const { data: feed, error: feedError } = await supabase
+    .from("feeds")
+    .select("*")
+    .eq("id", feedId)
+    .eq("user_id", user.id)
+    .single()
+
+  if (feedError || !feed) {
+    return { feed: null, articles: [], error: "Feed not found" }
+  }
+
+  const { data: articles } = await supabase
+    .from("articles")
+    .select("id, title, url, ai_score, ai_reason, summary, content_type, status, tags, found_at, published_at")
+    .eq("feed_id", feedId)
+    .eq("user_id", user.id)
+    .order("found_at", { ascending: false })
+
+  return { feed: feed as Feed, articles: (articles ?? []) as Article[] }
 }

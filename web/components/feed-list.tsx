@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -446,6 +447,7 @@ export function FeedList({ feedType, title, description, showOPML = false, showS
               <FeedRow
                 key={feed.id}
                 feed={feed}
+                feedType={feedType}
                 editingId={editingId}
                 editName={editName}
                 setEditName={setEditName}
@@ -477,8 +479,15 @@ export function FeedList({ feedType, title, description, showOPML = false, showS
 
 // ── Feed row component ──────────────────────────────────────────────────
 
+const DETAIL_PATHS: Record<FeedType, string> = {
+  newsletter: "/newsletters",
+  rss: "/feeds",
+  podcast: "/podcasts",
+}
+
 function FeedRow({
   feed,
+  feedType,
   editingId,
   editName,
   setEditName,
@@ -494,6 +503,7 @@ function FeedRow({
   formatDate,
 }: {
   feed: Feed
+  feedType: FeedType
   editingId: string | null
   editName: string
   setEditName: (v: string) => void
@@ -578,9 +588,12 @@ function FeedRow({
             </div>
           ) : (
             <>
-              <p className="truncate text-sm font-medium text-foreground">
+              <Link
+                href={`${DETAIL_PATHS[feedType]}/${feed.id}`}
+                className="truncate text-sm font-medium text-foreground hover:underline"
+              >
                 {feed.name}
-              </p>
+              </Link>
               <p className="truncate text-xs text-muted-foreground">
                 {feed.url}
               </p>
