@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1e2a3a"/>
+      <stop offset="100%" stop-color="#141d29"/>
+    </linearGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#e4a843"/>
+      <stop offset="100%" stop-color="#db9226"/>
+    </linearGradient>
+  </defs>
+  <!-- Background rounded square -->
+  <rect width="512" height="512" rx="108" fill="url(#bg)"/>
+  <!-- Stylized E made of three horizontal bars with amber accent -->
+  <!-- Top bar -->
+  <rect x="128" y="120" width="256" height="48" rx="8" fill="#b8c3d1"/>
+  <!-- Middle bar (amber accent — the filter) -->
+  <rect x="128" y="232" width="192" height="48" rx="8" fill="url(#amber)"/>
+  <!-- Bottom bar -->
+  <rect x="128" y="344" width="256" height="48" rx="8" fill="#b8c3d1"/>
+  <!-- Vertical spine of the E -->
+  <rect x="128" y="120" width="48" height="272" rx="8" fill="#dce1e8"/>
+</svg>
