@@ -3,6 +3,7 @@ import Script from "next/script"
 import { Inter, JetBrains_Mono } from "next/font/google"
 import { ThemeProvider } from "next-themes"
 import { Analytics } from "@vercel/analytics/react"
+import { PostHogProvider } from "@/providers/posthog-provider"
 import "./globals.css"
 
 const inter = Inter({
@@ -34,10 +35,12 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}>
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
-          {children}
-          <Analytics />
-        </ThemeProvider>
+        <PostHogProvider>
+          <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
+            {children}
+            <Analytics />
+          </ThemeProvider>
+        </PostHogProvider>
         <Script src="https://www.googletagmanager.com/gtag/js?id=G-1W8VPRTZ6D" strategy="afterInteractive" />
         <Script id="gtag-init" strategy="afterInteractive">{`
           window.dataLayer = window.dataLayer || [];

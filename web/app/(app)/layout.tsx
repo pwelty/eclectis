@@ -6,6 +6,8 @@ import { AppHeader } from "@/components/app-header"
 import { AppFooter } from "@/components/app-footer"
 import { RightSidebarProvider, RightSidebar } from "@/components/right-sidebar"
 import { getImpersonationState } from "@/actions/admin"
+import { PostHogIdentify } from "@/components/posthog-identify"
+import { SentryIdentify } from "@/components/sentry-identify"
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await getUser()
@@ -24,6 +26,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <RightSidebarProvider>
+      <PostHogIdentify userId={user.id} email={user.email ?? ""} />
+      <SentryIdentify userId={user.id} email={user.email ?? ""} />
       <div className="flex min-h-screen flex-col">
         <AppHeader
           email={user.email ?? ""}
