@@ -20,6 +20,7 @@ import structlog
 from engine import db
 from engine.config import settings
 from engine.handlers import register
+from engine.html_strip import strip_html
 from engine.services.byok import resolve_api_key
 from engine.services.claude import chat, extract_json_object
 from engine.services.usage import log_usage
@@ -75,8 +76,8 @@ Return ONLY a JSON object: {{"accept": true}} or {{"accept": false}}"""
 @register("article.add")
 async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
     url = payload.get("url")
-    title = payload.get("title", "Untitled")
-    content = payload.get("content")
+    title = strip_html(payload.get("title", "Untitled")) or "Untitled"
+    content = strip_html(payload.get("content"))
     source = payload.get("source", "unknown")
     feed_id = payload.get("feed_id")
     content_type = payload.get("content_type", "article")
