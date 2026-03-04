@@ -17,3 +17,17 @@ export async function getPublishingData() {
 
   return { feedHash }
 }
+
+export async function getNewsletterAddress(): Promise<string | null> {
+  const supabase = await createServerClient()
+  const user = await getUser()
+  if (!user) return null
+
+  const { data } = await supabase
+    .from("newsletter_addresses")
+    .select("address")
+    .eq("user_id", user.id)
+    .single()
+
+  return data?.address ?? null
+}

@@ -60,6 +60,62 @@ async def health():
     return {"status": "ok", "db": row["ok"] == 1}
 
 
+# Patterns for detecting forwarded messages and extracting the original sender.
+# Gmail: "---------- Forwarded message ----------" then "From: Name <email>"
+# Outlook: "From:" in a forwarded header block
+# Apple Mail: "Begin forwarded message:" then "From: ..."
+_FWD_SUBJECT_RE = re.compile(r"^(Fwd?|Fw):\s*", re.IGNORECASE)
+_FWD_BODY_PATTERNS = [
+    # Gmail / generic: "---------- Forwarded message ----------"
+    re.compile(r"[-—]+\s*Forwarded message\s*[-—]+", re.IGNORECASE),
+    # Apple Mail
+    re.compile(r"Begin forwarded message:", re.IGNORECASE),
+    # Outlook
+    re.compile(r"From:.*\nSent:.*\nTo:", re.IGNORECASE),
+]
+# Extract "From: Name <email>" or "From: email" from forwarded block
+_FWD_FROM_RE = re.compile(
+    r"From:\s*(?:([^<\n]+?)\s*<([^>]+)>|([^\s<\n]+@[^\s>\n]+))",
+    re.IGNORECASE,
+)
+
+
+def _extract_forwarded_sender(subject: str, text_body: str) -> tuple[str, str, str] | None:
+    """Detect a forwarded message and extract the original sender.
+
+    Returns (sender_email, sender_name, clean_subject) or None if not a forward.
+    """
+    is_forward = bool(_FWD_SUBJECT_RE.search(subject))
+
+    if not is_forward:
+        for pattern in _FWD_BODY_PATTERNS:
+            if pattern.search(text_body[:3000]):
+                is_forward = True
+                break
+
+    if not is_forward:
+        return None
+
+    # Find the original From in the forwarded block
+    match = _FWD_FROM_RE.search(text_body[:3000])
+    if not match:
+        return None
+
+    if match.group(2):
+        # "Name <email>" format
+        sender_name = match.group(1).strip().strip('"')
+        sender_email = match.group(2).strip().lower()
+    else:
+        # bare email
+        sender_email = match.group(3).strip().lower()
+        sender_name = sender_email.split("@")[0]
+
+    # Clean "Fwd: " prefix from subject
+    clean_subject = _FWD_SUBJECT_RE.sub("", subject).strip()
+
+    return sender_email, sender_name, clean_subject
+
+
 @app.post("/webhooks/brevo")
 async def brevo_inbound(request: Request):
     """Receive inbound email from Brevo and queue newsletter.process commands."""
@@ -103,6 +159,14 @@ async def brevo_inbound(request: Request):
 
         subject = item.get("Subject") or "Newsletter"
         html = item.get("RawHtmlBody") or item.get("HtmlBody") or ""
+        text_body = item.get("RawTextBody") or item.get("TextBody") or ""
+
+        # Detect forwarded messages — use original sender instead of forwarder
+        fwd = _extract_forwarded_sender(subject, text_body)
+        if fwd:
+            sender_email, sender_name, subject = fwd
+            log.info("webhook.brevo.forward_detected",
+                     original_sender=sender_email, user_id=str(user_id))
 
         # Find or auto-create newsletter feed for this sender
         feed = await db.fetchrow(
