@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { getArticles, vote, toggleBookmark, markAsRead } from "@/actions/articles"
@@ -35,6 +36,7 @@ interface Article {
   found_at: string
   userVote: string | null
   feedName: string | null
+  feed_id: string | null
 }
 
 type ContentFilter = "all" | "article" | "podcast" | "newsletter"
@@ -397,7 +399,16 @@ function ArticleCard({
 
           {/* Meta row */}
           <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
-            <span>{article.feedName || article.source}</span>
+            {article.feed_id && article.feedName ? (
+              <Link
+                href={`/${article.content_type === "newsletter" ? "newsletters" : article.content_type === "podcast" ? "podcasts" : "feeds"}/${article.feed_id}`}
+                className="hover:underline"
+              >
+                {article.feedName}
+              </Link>
+            ) : (
+              <span>{article.feedName || article.source}</span>
+            )}
             {article.published_at && (
               <>
                 <span>&middot;</span>
