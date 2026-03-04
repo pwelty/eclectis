@@ -30,3 +30,4 @@ from engine.handlers import google_search_scan  # noqa: E402, F401
 from engine.handlers import article_fetch  # noqa: E402, F401
 from engine.handlers import briefing_generate  # noqa: E402, F401
 from engine.handlers import newsletter_process  # noqa: E402, F401
+from engine.handlers import daily_pipeline  # noqa: E402, F401

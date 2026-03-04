@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import Script from "next/script"
 import { Inter, JetBrains_Mono } from "next/font/google"
 import { ThemeProvider } from "next-themes"
 import { Analytics } from "@vercel/analytics/react"
@@ -37,6 +38,13 @@ export default function RootLayout({
           {children}
           <Analytics />
         </ThemeProvider>
+        <Script src="https://www.googletagmanager.com/gtag/js?id=G-1W8VPRTZ6D" strategy="afterInteractive" />
+        <Script id="gtag-init" strategy="afterInteractive">{`
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-1W8VPRTZ6D');
+        `}</Script>
       </body>
     </html>
   )
