@@ -6,6 +6,7 @@ import { signUp } from "@/actions/auth"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
+import { GoogleSignInButton } from "@/components/google-sign-in-button"
 
 export default function SignupPage() {
   const [error, setError] = useState<string | null>(null)
@@ -30,6 +31,17 @@ export default function SignupPage() {
         <p className="mt-1 text-sm text-muted-foreground">
           Get started with Eclectis
         </p>
+      </div>
+
+      <GoogleSignInButton />
+
+      <div className="relative my-6">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-border" />
+        </div>
+        <div className="relative flex justify-center text-xs uppercase">
+          <span className="bg-card px-2 text-muted-foreground">or</span>
+        </div>
       </div>
 
       <form action={handleSubmit} className="space-y-4">

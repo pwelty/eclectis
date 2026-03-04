@@ -7,12 +7,14 @@ import { signIn } from "@/actions/auth"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
+import { GoogleSignInButton } from "@/components/google-sign-in-button"
 
 function LoginForm() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const searchParams = useSearchParams()
   const redirectTo = searchParams.get("redirectTo") || "/articles"
+  const authError = searchParams.get("error")
 
   async function handleSubmit(formData: FormData) {
     setLoading(true)
@@ -34,6 +36,23 @@ function LoginForm() {
         <p className="mt-1 text-sm text-muted-foreground">
           Welcome back to Eclectis
         </p>
+      </div>
+
+      {authError && (
+        <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
+          Authentication failed. Please try again.
+        </div>
+      )}
+
+      <GoogleSignInButton />
+
+      <div className="relative my-6">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-border" />
+        </div>
+        <div className="relative flex justify-center text-xs uppercase">
+          <span className="bg-card px-2 text-muted-foreground">or</span>
+        </div>
       </div>
 
       <form action={handleSubmit} className="space-y-4">
