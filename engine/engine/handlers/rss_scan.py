@@ -255,6 +255,13 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
     return {"scan_log_id": str(scan_log_id), "feeds_scanned": feeds_scanned, "posts_saved": saved_count}
 
 
+def _ensure_str(value: str | bytes) -> str:
+    """Ensure a value is a str; decode bytes as UTF-8 with replacement."""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value
+
+
 async def _fetch_feed(client: httpx.AsyncClient, feed, days_back: int) -> list[dict]:
     headers = {"User-Agent": "Eclectis/1.0"}
     if feed["etag"]:
@@ -277,10 +284,15 @@ async def _fetch_feed(client: httpx.AsyncClient, feed, days_back: int) -> list[d
             new_last_modified,
         )
 
-    parsed = feedparser.parse(resp.text)
-    if parsed.bozo and not parsed.entries:
-        log.warning("rss.malformed_feed", feed=feed["name"], error=str(parsed.bozo_exception))
-        return []
+    parsed = feedparser.parse(resp.content)
+    if parsed.bozo:
+        exc = parsed.bozo_exception
+        exc_name = type(exc).__name__ if exc else ""
+        if not parsed.entries:
+            log.warning("rss.malformed_feed", feed=feed["name"], error=str(exc))
+            return []
+        if "encoding" in exc_name.lower() or "character" in exc_name.lower():
+            log.warning("rss.encoding_recovered", feed=feed["name"], error=str(exc))
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=days_back)
 
@@ -294,9 +306,11 @@ async def _fetch_feed(client: httpx.AsyncClient, feed, days_back: int) -> list[d
                 published = datetime(*t[:6], tzinfo=timezone.utc)
                 break
 
-        summary = strip_html((entry.get("summary") or "").strip()) or ""
+        raw_summary = entry.get("summary") or ""
+        summary = strip_html(_ensure_str(raw_summary).strip()) or ""
         if not summary and entry.get("content"):
-            summary = strip_html((entry["content"][0].get("value", "") or "").strip()) or ""
+            raw_content = entry["content"][0].get("value", "") or ""
+            summary = strip_html(_ensure_str(raw_content).strip()) or ""
         summary = summary[:2000]
 
         url = normalize_url(entry.get("link") or entry.get("id", ""))
@@ -317,8 +331,9 @@ async def _fetch_feed(client: httpx.AsyncClient, feed, days_back: int) -> list[d
             if raw_dur:
                 duration_seconds = _parse_duration(str(raw_dur))
 
+        raw_title = entry.get("title") or "Untitled"
         post = {
-            "title": (strip_html((entry.get("title") or "Untitled").strip()) or "Untitled")[:255],
+            "title": (strip_html(_ensure_str(raw_title).strip()) or "Untitled")[:255],
             "url": url,
             "summary": summary,
             "published_at": published,
