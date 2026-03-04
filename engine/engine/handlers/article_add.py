@@ -126,7 +126,7 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
                 RETURNING id
                 """,
                 user_id, parsed_feed_id if isinstance(parsed_feed_id, UUID) else None,
-                title[:255], url, source, content_type,
+                title, url, source, content_type,
             )
             if article_id and not url.startswith("content://"):
                 await db.execute(
@@ -149,8 +149,8 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
         ON CONFLICT (user_id, url) DO NOTHING
         RETURNING id
         """,
-        user_id, parsed_feed_id, title[:255], url,
-        content[:100_000] if content else None,
+        user_id, parsed_feed_id, title, url,
+        content,
         source, content_type,
     )
 
