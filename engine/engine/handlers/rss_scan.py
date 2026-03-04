@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import datetime, timezone, timedelta
+from urllib.parse import urlparse, urlencode, parse_qs
 from uuid import UUID
 
 import feedparser
@@ -14,11 +15,57 @@ import structlog
 from engine import db
 from engine.config import settings
 from engine.handlers import register
+from engine.html_strip import strip_html
 from engine.services.byok import resolve_api_key
 from engine.services.claude import chat, extract_json_array
 from engine.services.usage import log_usage
 
 log = structlog.get_logger()
+
+_TRACKING_PARAMS = {
+    "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+    "fbclid", "gclid",
+}
+
+
+def normalize_url(url: str) -> str:
+    """Normalize a URL: https upgrade, lowercase host, strip tracking params, remove trailing slash."""
+    if not url or not isinstance(url, str):
+        return url or ""
+    url = url.strip()
+    if not url:
+        return ""
+
+    if url.startswith("http://"):
+        url = "https://" + url[7:]
+
+    try:
+        parsed = urlparse(url)
+        hostname = (parsed.hostname or "").lower()
+        scheme = parsed.scheme or "https"
+
+        # Strip tracking params
+        qs = parse_qs(parsed.query, keep_blank_values=True)
+        filtered = {k: v for k, v in qs.items() if k.lower() not in _TRACKING_PARAMS}
+        query = urlencode(filtered, doseq=True) if filtered else ""
+
+        # Remove trailing slashes from path
+        path = parsed.path.rstrip("/") or ""
+
+        result = f"{scheme}://{hostname}"
+        if parsed.port and parsed.port not in (80, 443):
+            result += f":{parsed.port}"
+        if path:
+            result += path
+        if query:
+            result += "?" + query
+        if parsed.fragment:
+            result += "#" + parsed.fragment
+
+        return result
+    except Exception:
+        return url.lower().rstrip("/")
+
 
 DAYS_BACK = 7
 MAX_POSTS_PER_FEED = 50
@@ -247,12 +294,12 @@ async def _fetch_feed(client: httpx.AsyncClient, feed, days_back: int) -> list[d
                 published = datetime(*t[:6], tzinfo=timezone.utc)
                 break
 
-        summary = (entry.get("summary") or "").strip()
+        summary = strip_html((entry.get("summary") or "").strip()) or ""
         if not summary and entry.get("content"):
-            summary = (entry["content"][0].get("value", "") or "").strip()
+            summary = strip_html((entry["content"][0].get("value", "") or "").strip()) or ""
         summary = summary[:2000]
 
-        url = entry.get("link") or entry.get("id", "")
+        url = normalize_url(entry.get("link") or entry.get("id", ""))
         if not url:
             continue
 
@@ -271,7 +318,7 @@ async def _fetch_feed(client: httpx.AsyncClient, feed, days_back: int) -> list[d
                 duration_seconds = _parse_duration(str(raw_dur))
 
         post = {
-            "title": (entry.get("title") or "Untitled").strip()[:255],
+            "title": (strip_html((entry.get("title") or "Untitled").strip()) or "Untitled")[:255],
             "url": url,
             "summary": summary,
             "published_at": published,
