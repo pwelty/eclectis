@@ -11,6 +11,7 @@ import {
   Bookmark,
   Search,
   Send,
+  FileText,
   Settings,
   Shield,
   Users,
@@ -38,6 +39,7 @@ const NAV_GROUPS = [
   {
     label: "Publishing",
     items: [
+      { href: "/briefings", label: "Briefings", icon: FileText },
       { href: "/publishing", label: "Outputs", icon: Send },
     ],
   },

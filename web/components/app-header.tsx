@@ -15,6 +15,7 @@ import {
   Headphones,
   Search,
   Send,
+  FileText,
   Settings,
 } from "lucide-react"
 import { Logo } from "@/components/logo"
@@ -39,6 +40,7 @@ const NAV_GROUPS = [
   {
     label: "Publishing",
     items: [
+      { href: "/briefings", label: "Briefings", icon: FileText },
       { href: "/publishing", label: "Outputs", icon: Send },
     ],
   },

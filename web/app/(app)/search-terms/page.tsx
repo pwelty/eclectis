@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -12,8 +11,10 @@ import {
   deleteSearchTerm,
   toggleSearchTerm,
   triggerSearch,
+  discoverAllSearchTerms,
   type SearchTerm,
 } from "@/actions/search-terms"
+import { checkIsAdmin } from "@/actions/admin"
 import {
   Plus,
   Pencil,
@@ -21,8 +22,8 @@ import {
   Search,
   Check,
   X,
-  ArrowLeft,
   Loader2,
+  Sparkles,
 } from "lucide-react"
 
 // ── Main page ──────────────────────────────────────────────────────────────
@@ -51,16 +52,27 @@ export default function SearchTermsPage() {
   const [triggeringId, setTriggeringId] = useState<string | null>(null)
   const [triggeredId, setTriggeredId] = useState<string | null>(null)
 
+  // Discover all state
+  const [discovering, setDiscovering] = useState(false)
+  const [discovered, setDiscovered] = useState(false)
+
+  // Admin state
+  const [isAdmin, setIsAdmin] = useState(false)
+
   // ── Load terms ─────────────────────────────────────────────────────────
 
   useEffect(() => {
     async function load() {
-      const result = await getSearchTerms()
+      const [result, admin] = await Promise.all([
+        getSearchTerms(),
+        checkIsAdmin(),
+      ])
       if (result.error) {
         setError(result.error)
       } else {
         setTerms(result.terms)
       }
+      setIsAdmin(admin)
       setLoading(false)
     }
     load()
@@ -186,6 +198,20 @@ export default function SearchTermsPage() {
     setTriggeringId(null)
   }, [])
 
+  // ── Discover all ──────────────────────────────────────────────────
+
+  const handleDiscoverAll = useCallback(async () => {
+    setDiscovering(true)
+    const result = await discoverAllSearchTerms()
+    if (result.error) {
+      setAddError(result.error)
+    } else {
+      setDiscovered(true)
+      setTimeout(() => setDiscovered(false), 3000)
+    }
+    setDiscovering(false)
+  }, [])
+
   // ── Loading state ──────────────────────────────────────────────────────
 
   if (loading) {
@@ -206,12 +232,12 @@ export default function SearchTermsPage() {
       <div className="flex min-h-screen items-center justify-center px-4">
         <div className="text-center">
           <p className="text-sm text-destructive">{error}</p>
-          <Link
+          <a
             href="/login"
             className="mt-2 inline-block text-sm text-muted-foreground hover:underline"
           >
             Log in
-          </Link>
+          </a>
         </div>
       </div>
     )
@@ -222,21 +248,35 @@ export default function SearchTermsPage() {
   return (
     <div className="mx-auto max-w-2xl px-4 py-10 sm:py-16">
       {/* Header */}
-      <div className="mb-8">
-        <Link
-          href="/articles"
-          className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="size-3.5" />
-          Back to articles
-        </Link>
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-          Search terms
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Manage Google discovery search terms. Active terms are scanned
-          automatically during each pipeline run.
-        </p>
+      <div className="mb-8 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+            Search terms
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Manage Google discovery search terms. Active terms are scanned
+            automatically during each pipeline run.
+          </p>
+        </div>
+        {isAdmin && terms.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleDiscoverAll}
+            disabled={discovering}
+            className="shrink-0 gap-1.5"
+          >
+            {discovering ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : discovered ? (
+              <Check className="size-3.5 text-green-600" />
+            ) : (
+              <Sparkles className="size-3.5" />
+            )}
+            {discovered ? "Scan queued" : "Scan now"}
+            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">Admin</span>
+          </Button>
+        )}
       </div>
 
       {/* Add term form */}

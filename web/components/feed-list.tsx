@@ -14,6 +14,7 @@ import {
   importOPML,
   type Feed,
 } from "@/actions/feeds"
+import { checkIsAdmin } from "@/actions/admin"
 import {
   Plus,
   X,
@@ -66,11 +67,12 @@ interface FeedListProps {
   title: string
   description: string
   showOPML?: boolean
+  showScanAll?: boolean
 }
 
 // ── Main component ──────────────────────────────────────────────────────
 
-export function FeedList({ feedType, title, description, showOPML = false }: FeedListProps) {
+export function FeedList({ feedType, title, description, showOPML = false, showScanAll = true }: FeedListProps) {
   const config = TYPE_CONFIG[feedType]
   const EmptyIcon = config.icon
 
@@ -102,16 +104,23 @@ export function FeedList({ feedType, title, description, showOPML = false }: Fee
   const [discovering, setDiscovering] = useState(false)
   const [discovered, setDiscovered] = useState(false)
 
+  // Admin state
+  const [isAdmin, setIsAdmin] = useState(false)
+
   // ── Load feeds ──────────────────────────────────────────────────────
 
   useEffect(() => {
     async function load() {
-      const result = await getFeeds(feedType)
+      const [result, admin] = await Promise.all([
+        getFeeds(feedType),
+        checkIsAdmin(),
+      ])
       if (result.error) {
         setError(result.error)
       } else {
         setFeeds(result.feeds)
       }
+      setIsAdmin(admin)
       setLoading(false)
     }
     load()
@@ -310,21 +319,23 @@ export function FeedList({ feedType, title, description, showOPML = false }: Fee
           <h1 className="text-2xl font-semibold text-foreground">{title}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{description}</p>
         </div>
-        {feeds.length > 0 && (
+        {isAdmin && showScanAll && feeds.length > 0 && (
           <Button
             variant="outline"
             size="sm"
             onClick={handleDiscover}
             disabled={discovering}
+            className="gap-1.5"
           >
             {discovered ? (
-              <Check className="size-4 text-green-600" />
+              <Check className="size-3.5 text-green-600" />
             ) : discovering ? (
-              <RefreshCw className="size-4 animate-spin" />
+              <RefreshCw className="size-3.5 animate-spin" />
             ) : (
-              <Sparkles className="size-4" />
+              <Sparkles className="size-3.5" />
             )}
-            {discovered ? "Scan queued" : "Discover"}
+            {discovered ? "Scan queued" : "Scan now"}
+            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">Admin</span>
           </Button>
         )}
       </div>

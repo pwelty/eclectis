@@ -6,6 +6,7 @@ export default function NewslettersPage() {
       feedType="newsletter"
       title="Newsletters"
       description="Manage your newsletter sources. You can also forward newsletters to your Eclectis address."
+      showScanAll={false}
     />
   )
 }

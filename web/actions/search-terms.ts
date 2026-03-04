@@ -151,6 +151,24 @@ export async function deleteSearchTerm(
   return { error: null }
 }
 
+// ── Discover all — scan all active search terms ───────────────────────────
+
+export async function discoverAllSearchTerms(): Promise<{ error: string | null }> {
+  const supabase = await createServerClient()
+  const user = await getUser()
+  if (!user) return { error: "Not authenticated" }
+
+  const { error } = await supabase.from("commands").insert({
+    user_id: user.id,
+    type: "google_search.scan",
+  })
+
+  if (error) return { error: error.message }
+
+  revalidatePath("/search-terms")
+  return { error: null }
+}
+
 // ── Trigger search scan ────────────────────────────────────────────────────
 
 export async function triggerSearch(
