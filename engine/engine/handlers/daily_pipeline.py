@@ -63,5 +63,15 @@ async def handle_daily_pipeline(*, command_id: UUID, payload: dict, user_id: UUI
     )
     queued.append("briefing.generate")
 
+    # 4. User learning — analyze engagement to improve scoring
+    await db.execute(
+        """INSERT INTO commands (type, user_id, idempotency_key)
+           VALUES ('user.learn', $1, $2)
+           ON CONFLICT (idempotency_key) DO NOTHING""",
+        user_id,
+        f"auto:user.learn:{user_id}:{window}",
+    )
+    queued.append("user.learn")
+
     log.info("daily.pipeline.queued", user_id=str(user_id), commands=queued)
     return {"queued": queued}

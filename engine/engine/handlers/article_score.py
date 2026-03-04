@@ -44,11 +44,18 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
         return {"status": "already_scored", "article_id": str(article_id), "score": article["ai_score"]}
 
     # Get user interests
-    profile = await db.fetchrow("SELECT interests FROM user_profiles WHERE id = $1", user_id)
+    profile = await db.fetchrow(
+        "SELECT interests, learned_preferences FROM user_profiles WHERE id = $1", user_id
+    )
     interests = (profile["interests"] or "") if profile else ""
+    learned = (profile["learned_preferences"] or "") if profile else ""
 
     # Build vote history context
     ratings_context = await _build_ratings_context(user_id)
+
+    learned_section = ""
+    if learned:
+        learned_section = f"\nLEARNED PREFERENCES (from user behavior):\n{learned}\n"
 
     # Resolve API key (BYOK gating)
     api_key = await resolve_api_key(user_id)
@@ -62,7 +69,7 @@ USER INTERESTS:
 {interests or "General technology and business"}
 
 {ratings_context}
-
+{learned_section}
 ARTICLE:
 Title: {article["title"]}
 URL: {article["url"]}
