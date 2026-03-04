@@ -28,7 +28,7 @@ export async function getArticles({
 
   let query = supabase
     .from("articles")
-    .select("*, votes(direction)", { count: "exact" })
+    .select("*, votes(direction), feeds(name)", { count: "exact" })
     .eq("user_id", user.id)
     .or("ai_score.is.null,ai_score.gt.0")
 
@@ -69,8 +69,10 @@ export async function getArticles({
   const articles = (data ?? []).map((article: Record<string, unknown>) => {
     const votes = article.votes as Array<{ direction: string }> | null
     const userVote = votes?.[0]?.direction ?? null
-    const { votes: _, ...rest } = article
-    return { ...rest, userVote }
+    const feed = article.feeds as { name: string } | null
+    const feedName = feed?.name ?? null
+    const { votes: _, feeds: _f, ...rest } = article
+    return { ...rest, userVote, feedName }
   })
 
   return { articles, total: count ?? 0 }

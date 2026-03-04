@@ -34,6 +34,7 @@ interface Article {
   published_at: string | null
   found_at: string
   userVote: string | null
+  feedName: string | null
 }
 
 type ContentFilter = "all" | "article" | "podcast" | "newsletter"
@@ -396,7 +397,7 @@ function ArticleCard({
 
           {/* Meta row */}
           <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
-            <span>{article.source}</span>
+            <span>{article.feedName || article.source}</span>
             {article.published_at && (
               <>
                 <span>&middot;</span>
