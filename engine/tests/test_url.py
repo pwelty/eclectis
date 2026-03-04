@@ -1,6 +1,6 @@
-"""Tests for URL normalization in rss_scan."""
+"""Tests for shared URL normalization and domain extraction."""
 
-from engine.handlers.rss_scan import normalize_url
+from engine.url import extract_domain, normalize_url
 
 
 def test_http_to_https():
@@ -13,8 +13,11 @@ def test_keeps_https():
 
 def test_lowercases_hostname():
     result = normalize_url("https://Example.COM/Feed")
-    assert "example.com" in result
     assert result == "https://example.com/Feed"
+
+
+def test_strips_www():
+    assert normalize_url("https://www.example.com/page") == "https://example.com/page"
 
 
 def test_strips_utm_params():
@@ -46,7 +49,7 @@ def test_root_url_trailing_slash():
 
 
 def test_full_normalization():
-    result = normalize_url("http://Example.COM/feed/?utm_source=rss")
+    result = normalize_url("http://www.Example.COM/feed/?utm_source=rss")
     assert result == "https://example.com/feed"
 
 
@@ -66,3 +69,30 @@ def test_malformed_url():
 def test_preserves_hash():
     result = normalize_url("https://example.com/page#section")
     assert result == "https://example.com/page#section"
+
+
+def test_http_vs_https_same():
+    """Same article with http:// vs https:// normalizes identically."""
+    assert normalize_url("http://example.com/article") == normalize_url("https://example.com/article")
+
+
+def test_www_vs_no_www_same():
+    """Same article with www. vs without normalizes identically."""
+    assert normalize_url("https://www.example.com/article") == normalize_url("https://example.com/article")
+
+
+def test_tracking_params_vs_clean_same():
+    """Same article with tracking params vs without normalizes identically."""
+    clean = normalize_url("https://example.com/article")
+    tracked = normalize_url("https://example.com/article?utm_source=rss&utm_medium=feed")
+    assert clean == tracked
+
+
+def test_extract_domain():
+    assert extract_domain("https://www.example.com/page") == "example.com"
+    assert extract_domain("https://blog.example.com/page") == "blog.example.com"
+    assert extract_domain("") == ""
+
+
+def test_extract_domain_no_www():
+    assert extract_domain("https://example.com/page") == "example.com"

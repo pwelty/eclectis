@@ -24,6 +24,7 @@ from engine.html_strip import strip_html
 from engine.services.byok import resolve_api_key
 from engine.services.claude import chat, extract_json_object
 from engine.services.usage import log_usage
+from engine.url import extract_domain, normalize_url
 
 log = structlog.get_logger()
 
@@ -91,6 +92,10 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
     elif not url:
         return {"status": "error", "reason": "No URL or content provided"}
 
+    # Normalize URL before any dedup checks (skip content:// URLs)
+    if not url.startswith("content://"):
+        url = normalize_url(url)
+
     # Deduplicate against existing articles
     existing = await db.fetchrow(
         "SELECT id FROM articles WHERE user_id = $1 AND url = $2",
@@ -99,6 +104,24 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
     if existing:
         bound_log.info("article.add.duplicate", url=url[:80])
         return {"status": "duplicate", "article_id": str(existing["id"])}
+
+    # Title+domain dedup: catch same article from different feed URLs
+    if not url.startswith("content://"):
+        domain = extract_domain(url)
+        if domain and title and title != "Untitled":
+            title_dup = await db.fetchrow(
+                """
+                SELECT id FROM articles
+                WHERE user_id = $1
+                  AND LOWER(title) = LOWER($2)
+                  AND url LIKE '%' || $3 || '%'
+                LIMIT 1
+                """,
+                user_id, title, domain,
+            )
+            if title_dup:
+                bound_log.info("article.add.title_domain_dup", title=title[:80], domain=domain)
+                return {"status": "duplicate", "article_id": str(title_dup["id"])}
 
     # Deduplicate against processed_posts (for URL-based articles)
     if not url.startswith("content://"):

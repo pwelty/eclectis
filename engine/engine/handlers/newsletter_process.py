@@ -18,6 +18,7 @@ import structlog
 
 from engine import db
 from engine.handlers import register
+from engine.url import normalize_url
 
 log = structlog.get_logger()
 
@@ -84,8 +85,8 @@ def _extract_links(html: str) -> list[dict]:
     results: list[dict] = []
 
     for url, text in parser.links:
-        # Normalize: strip tracking params and fragments
-        url = url.split("?utm_")[0].split("#")[0].rstrip("/")
+        # Normalize URL using shared utility
+        url = normalize_url(url)
         if url in seen_urls:
             continue
 
