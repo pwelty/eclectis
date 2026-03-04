@@ -594,6 +594,18 @@ function FeedRow({
               >
                 {feed.name}
               </Link>
+              {feed.tags && feed.tags.length > 0 && (
+                <div className="mt-0.5 flex flex-wrap gap-1">
+                  {feed.tags.map((tag: string) => (
+                    <span
+                      key={tag}
+                      className="inline-flex items-center rounded-full bg-secondary px-1.5 py-0 text-[10px] text-muted-foreground"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
               <p className="truncate text-xs text-muted-foreground">
                 {feed.url}
               </p>

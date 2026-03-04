@@ -12,6 +12,7 @@ export default async function NewslettersPage() {
         feedType="newsletter"
         title="Newsletters"
         description="Forward newsletters to your Eclectis address to automatically extract and score articles."
+        showOPML
         showScanAll={false}
       />
     </div>

@@ -5,7 +5,7 @@ export default function RSSFeedsPage() {
     <FeedList
       feedType="rss"
       title="RSS feeds"
-      description="Manage your RSS feed subscriptions."
+      description="Add feeds manually or import from Inoreader (export OPML from Preferences > Import/Export)."
       showOPML
     />
   )

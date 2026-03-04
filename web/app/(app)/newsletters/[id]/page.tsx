@@ -57,6 +57,18 @@ export default async function NewsletterDetailPage({
                 })}
               </span>
             </div>
+            {feed.tags && feed.tags.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {feed.tags.map((tag: string) => (
+                  <span
+                    key={tag}
+                    className="inline-flex items-center rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
