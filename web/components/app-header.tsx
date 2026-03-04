@@ -9,24 +9,31 @@ import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import {
   Newspaper,
+  Bookmark,
   Rss,
+  Mail,
+  Headphones,
   Search,
   Send,
   Settings,
 } from "lucide-react"
+import { Logo } from "@/components/logo"
 
 const NAV_GROUPS = [
   {
     label: "Reading",
     items: [
       { href: "/articles", label: "Articles", icon: Newspaper },
+      { href: "/bookmarks", label: "Bookmarks", icon: Bookmark },
     ],
   },
   {
     label: "Sources",
     items: [
-      { href: "/feeds", label: "Feeds", icon: Rss },
-      { href: "/search-terms", label: "Discovery", icon: Search },
+      { href: "/feeds", label: "RSS", icon: Rss },
+      { href: "/newsletters", label: "Newsletters", icon: Mail },
+      { href: "/podcasts", label: "Podcasts", icon: Headphones },
+      { href: "/search-terms", label: "Search", icon: Search },
     ],
   },
   {
@@ -36,7 +43,7 @@ const NAV_GROUPS = [
     ],
   },
   {
-    label: "",
+    label: "Account",
     items: [
       { href: "/settings", label: "Settings", icon: Settings },
     ],
@@ -81,7 +88,8 @@ export function AppHeader({ email }: { email: string }) {
         </button>
 
         {/* Brand */}
-        <Link href="/articles" className="text-base font-semibold text-foreground">
+        <Link href="/articles" className="flex items-center gap-2 text-base font-semibold text-foreground">
+          <Logo className="size-6" />
           Eclectis
         </Link>
 
