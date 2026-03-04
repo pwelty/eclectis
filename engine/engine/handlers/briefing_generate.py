@@ -143,7 +143,8 @@ Create a briefing with:
 2. A brief intro (1-2 sentences, {greeting} tone, mention how many articles were curated)
 3. 2-4 themed sections grouping related articles. Each section has:
    - A section heading (theme name)
-   - For each article: the title as a link, plus a 1-sentence takeaway
+   - A 2-3 sentence summary of the theme
+   - Then EVERY article in the section listed individually with its title as a clickable link to the original source URL, plus a 1-sentence takeaway. Never omit article links — every article must appear as its own linked entry.
 4. A brief closing line
 
 Return a JSON object:
@@ -153,6 +154,7 @@ Return a JSON object:
   "sections": [
     {{
       "heading": "Theme name",
+      "summary": "2-3 sentence overview of this theme.",
       "items": [
         {{"title": "Article title", "url": "https://...", "takeaway": "One sentence."}}
       ]
@@ -185,12 +187,21 @@ def _render_html(data: dict, articles: list, user_name: str) -> str:
               </td>
             </tr>"""
 
+        summary_html = ""
+        if section.get("summary"):
+            summary_html = f"""
+        <tr>
+          <td style="padding: 4px 0 8px 0;">
+            <p style="margin: 0; color: #475569; font-size: 14px; line-height: 1.5;">{section['summary']}</p>
+          </td>
+        </tr>"""
+
         sections_html += f"""
         <tr>
           <td style="padding: 20px 0 8px 0;">
             <h2 style="margin: 0; font-size: 18px; color: #1e293b; font-weight: 600;">{section.get('heading', '')}</h2>
           </td>
-        </tr>
+        </tr>{summary_html}
         <tr>
           <td>
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
@@ -214,7 +225,12 @@ def _render_html(data: dict, articles: list, user_name: str) -> str:
             <td style="background-color: #0f172a; padding: 24px 32px;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                 <tr>
-                  <td style="color: #ffffff; font-size: 20px; font-weight: 600;">Eclectis</td>
+                  <td>
+                    <a href="https://www.eclectis.io" style="text-decoration: none;">
+                      <img src="https://www.eclectis.io/icon.svg" alt="" width="28" height="28" style="vertical-align: middle; border-radius: 6px; margin-right: 10px;" />
+                      <span style="color: #ffffff; font-size: 20px; font-weight: 600; vertical-align: middle;">Eclectis</span>
+                    </a>
+                  </td>
                   <td align="right" style="color: #94a3b8; font-size: 13px;">{today}</td>
                 </tr>
               </table>
