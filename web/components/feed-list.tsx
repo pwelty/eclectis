@@ -10,6 +10,7 @@ import {
   updateFeed,
   deleteFeed,
   triggerScan,
+  discoverAll,
   importOPML,
   type Feed,
 } from "@/actions/feeds"
@@ -24,6 +25,7 @@ import {
   Trash2,
   RefreshCw,
   Check,
+  Sparkles,
 } from "lucide-react"
 
 // ── Type config ─────────────────────────────────────────────────────────
@@ -95,6 +97,10 @@ export function FeedList({ feedType, title, description, showOPML = false }: Fee
 
   // Scan state
   const [scanningId, setScanningId] = useState<string | null>(null)
+
+  // Discover state
+  const [discovering, setDiscovering] = useState(false)
+  const [discovered, setDiscovered] = useState(false)
 
   // ── Load feeds ──────────────────────────────────────────────────────
 
@@ -207,6 +213,16 @@ export function FeedList({ feedType, title, description, showOPML = false }: Fee
     setTimeout(() => setScanningId(null), 1500)
   }, [])
 
+  // ── Discover all ──────────────────────────────────────────────────
+
+  const handleDiscover = useCallback(async () => {
+    setDiscovering(true)
+    await discoverAll(feedType)
+    setDiscovering(false)
+    setDiscovered(true)
+    setTimeout(() => setDiscovered(false), 3000)
+  }, [feedType])
+
   // ── OPML import ────────────────────────────────────────────────────
 
   const handleImportOPML = useCallback(
@@ -289,9 +305,28 @@ export function FeedList({ feedType, title, description, showOPML = false }: Fee
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-12">
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-foreground">{title}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+      <div className="mb-8 flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground">{title}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+        </div>
+        {feeds.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleDiscover}
+            disabled={discovering}
+          >
+            {discovered ? (
+              <Check className="size-4 text-green-600" />
+            ) : discovering ? (
+              <RefreshCw className="size-4 animate-spin" />
+            ) : (
+              <Sparkles className="size-4" />
+            )}
+            {discovered ? "Scan queued" : "Discover"}
+          </Button>
+        )}
       </div>
 
       {/* Add feed form */}
