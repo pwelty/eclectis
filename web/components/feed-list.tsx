@@ -28,6 +28,7 @@ import {
   RefreshCw,
   Check,
   Sparkles,
+  Loader2,
 } from "lucide-react"
 
 // ── Type config ─────────────────────────────────────────────────────────
@@ -89,6 +90,7 @@ export function FeedList({ feedType, title, description, showOPML = false, showS
 
   // OPML import state
   const [importResult, setImportResult] = useState<string | null>(null)
+  const [importing, setImporting] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Edit state
@@ -242,6 +244,7 @@ export function FeedList({ feedType, title, description, showOPML = false, showS
 
       setImportResult(null)
       setAddError(null)
+      setImporting(true)
 
       try {
         const text = await file.text()
@@ -264,6 +267,8 @@ export function FeedList({ feedType, title, description, showOPML = false, showS
         }
       } catch {
         setAddError("Failed to read OPML file")
+      } finally {
+        setImporting(false)
       }
 
       e.target.value = ""
@@ -393,10 +398,20 @@ export function FeedList({ feedType, title, description, showOPML = false, showS
             <Button
               variant="outline"
               size="sm"
+              disabled={importing}
               onClick={() => fileInputRef.current?.click()}
             >
-              <Upload className="size-4" />
-              Import OPML
+              {importing ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  Importing…
+                </>
+              ) : (
+                <>
+                  <Upload className="size-4" />
+                  Import OPML
+                </>
+              )}
             </Button>
 
             {importResult && (

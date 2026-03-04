@@ -379,25 +379,22 @@ export async function importOPML(formData: FormData) {
     }
   }
 
-  let imported = 0
-  let failed = 0
+  // Batch upsert for speed (Supabase handles arrays)
+  const rows = feeds.map((feed) => ({
+    user_id: user.id,
+    name: feed.name,
+    url: feed.url,
+    type: feed.type,
+    tags: feed.tags,
+  }))
 
-  for (const feed of feeds) {
-    const { error } = await supabase
-      .from("feeds")
-      .upsert(
-        { user_id: user.id, name: feed.name, url: feed.url, type: feed.type, tags: feed.tags },
-        { onConflict: "user_id,url" }
-      )
-      .select()
-      .single()
+  const { data, error: upsertError } = await supabase
+    .from("feeds")
+    .upsert(rows, { onConflict: "user_id,url", ignoreDuplicates: true })
+    .select("id")
 
-    if (error) {
-      failed++
-    } else {
-      imported++
-    }
-  }
+  const imported = data?.length ?? 0
+  const failed = upsertError ? rows.length : rows.length - imported
 
   revalidatePath("/feeds")
   revalidatePath("/newsletters")
