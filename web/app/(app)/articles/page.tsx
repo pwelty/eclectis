@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { getArticles, vote, toggleBookmark, markAsRead } from "@/actions/articles"
+import { trackClick } from "@/actions/engagement"
 import { Input } from "@/components/ui/input"
 import {
   ThumbsUp,
@@ -382,7 +383,13 @@ function ArticleCard({
             href={article.url}
             target="_blank"
             rel="noopener noreferrer"
-            onClick={() => onClickThrough(article.id)}
+            onClick={() => {
+              onClickThrough(article.id)
+              trackClick(article.id, article.feed_id ?? undefined, {
+                ai_score: article.ai_score,
+                title: article.title,
+              })
+            }}
             className="group/link inline-flex items-start gap-1.5 text-sm font-medium text-foreground hover:text-accent"
           >
             <span className="line-clamp-2">{article.title}</span>
