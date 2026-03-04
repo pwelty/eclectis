@@ -10,11 +10,17 @@ export async function getArticles({
   contentType,
   status,
   bookmarked,
+  search,
+  sort = "score",
+  minScore,
 }: {
   offset?: number
   contentType?: string
   status?: string
   bookmarked?: boolean
+  search?: string
+  sort?: "score" | "newest" | "oldest"
+  minScore?: number
 } = {}) {
   const supabase = await createServerClient()
   const user = await getUser()
@@ -24,9 +30,20 @@ export async function getArticles({
     .from("articles")
     .select("*, votes(direction)", { count: "exact" })
     .eq("user_id", user.id)
-    .order("ai_score", { ascending: false, nullsFirst: false })
-    .order("found_at", { ascending: false })
-    .range(offset, offset + PAGE_SIZE - 1)
+
+  // Sort
+  if (sort === "newest") {
+    query = query.order("found_at", { ascending: false })
+  } else if (sort === "oldest") {
+    query = query.order("found_at", { ascending: true })
+  } else {
+    // Default: score
+    query = query
+      .order("ai_score", { ascending: false, nullsFirst: false })
+      .order("found_at", { ascending: false })
+  }
+
+  query = query.range(offset, offset + PAGE_SIZE - 1)
 
   if (contentType && contentType !== "all") {
     query = query.eq("content_type", contentType)
@@ -36,6 +53,12 @@ export async function getArticles({
   }
   if (bookmarked) {
     query = query.eq("bookmarked", true)
+  }
+  if (search) {
+    query = query.ilike("title", `%${search}%`)
+  }
+  if (minScore !== undefined) {
+    query = query.gte("ai_score", minScore)
   }
 
   const { data, count, error } = await query

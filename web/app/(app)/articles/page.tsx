@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { getArticles, vote, toggleBookmark, markAsRead } from "@/actions/articles"
+import { Input } from "@/components/ui/input"
 import {
   ThumbsUp,
   ThumbsDown,
@@ -13,6 +14,8 @@ import {
   Headphones,
   Mail,
   Loader2,
+  Search,
+  ArrowUpDown,
 } from "lucide-react"
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -35,6 +38,8 @@ interface Article {
 
 type ContentFilter = "all" | "article" | "podcast" | "newsletter"
 type StatusFilter = "all" | "to_read" | "read" | "bookmarked"
+type SortOption = "score" | "newest" | "oldest"
+type MinScoreOption = undefined | 5 | 7 | 9
 
 // ── Main page ──────────────────────────────────────────────────────────────
 
@@ -45,7 +50,21 @@ export default function ArticlesPage() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [contentFilter, setContentFilter] = useState<ContentFilter>("all")
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
+  const [sortOption, setSortOption] = useState<SortOption>("score")
+  const [minScore, setMinScore] = useState<MinScoreOption>(undefined)
+  const [searchInput, setSearchInput] = useState("")
+  const [searchQuery, setSearchQuery] = useState("")
   const loaderRef = useRef<HTMLDivElement>(null)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Debounce search input
+  const handleSearchChange = useCallback((value: string) => {
+    setSearchInput(value)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      setSearchQuery(value)
+    }, 300)
+  }, [])
 
   // ── Fetch articles ─────────────────────────────────────────────────────
 
@@ -59,6 +78,9 @@ export default function ArticlesPage() {
         contentType: contentFilter !== "all" ? contentFilter : undefined,
         status: statusFilter === "bookmarked" ? undefined : statusFilter !== "all" ? statusFilter : undefined,
         bookmarked: statusFilter === "bookmarked" ? true : undefined,
+        search: searchQuery || undefined,
+        sort: sortOption,
+        minScore,
       })
 
       if (append) {
@@ -70,7 +92,7 @@ export default function ArticlesPage() {
       setLoading(false)
       setLoadingMore(false)
     },
-    [contentFilter, statusFilter]
+    [contentFilter, statusFilter, searchQuery, sortOption, minScore]
   )
 
   useEffect(() => {
@@ -151,8 +173,19 @@ export default function ArticlesPage() {
         </p>
       </div>
 
+      {/* Search */}
+      <div className="relative mb-4">
+        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          placeholder="Search articles..."
+          value={searchInput}
+          onChange={(e) => handleSearchChange(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+
       {/* Filters */}
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mb-6 flex flex-wrap gap-3">
         {/* Content type filter */}
         <div className="flex gap-1 rounded-lg bg-muted p-1">
           {(
@@ -199,6 +232,56 @@ export default function ArticlesPage() {
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Min score filter */}
+        <div className="flex gap-1 rounded-lg bg-muted p-1">
+          {(
+            [
+              { value: undefined, label: "Any score" },
+              { value: 5, label: "5+" },
+              { value: 7, label: "7+" },
+              { value: 9, label: "9+" },
+            ] as const
+          ).map((f) => (
+            <button
+              key={f.label}
+              onClick={() => setMinScore(f.value)}
+              className={cn(
+                "rounded-md px-3 py-1.5 text-sm font-medium tabular-nums transition-colors",
+                minScore === f.value
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Sort selector */}
+        <div className="flex gap-1 rounded-lg bg-muted p-1">
+          {(
+            [
+              { value: "score", label: "Score" },
+              { value: "newest", label: "Newest" },
+              { value: "oldest", label: "Oldest" },
+            ] as const
+          ).map((f) => (
+            <button
+              key={f.value}
+              onClick={() => setSortOption(f.value)}
+              className={cn(
+                "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                sortOption === f.value
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {f.value === "score" && <ArrowUpDown className="size-3.5" />}
               {f.label}
             </button>
           ))}
