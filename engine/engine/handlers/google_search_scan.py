@@ -14,6 +14,7 @@ import structlog
 from engine import db
 from engine.config import settings
 from engine.handlers import register
+from engine.services.byok import resolve_api_key
 from engine.services.claude import chat, extract_json_object
 from engine.services.usage import log_usage
 
@@ -94,6 +95,9 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
         )
         return {"scan_log_id": str(scan_log_id), "posts_found": len(all_results), "posts_saved": 0}
 
+    # Resolve API key (BYOK gating)
+    api_key = await resolve_api_key(user_id)
+
     # Build scoring context
     interests = await _get_interests(user_id)
     ratings_context = await _build_ratings_context(user_id)
@@ -103,7 +107,7 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
     saved_count = 0
 
     for post_data in new_results:
-        scored, usage = await asyncio.to_thread(score_single_result, post_data, interests, ratings_context)
+        scored, usage = await asyncio.to_thread(score_single_result, post_data, interests, ratings_context, api_key)
         total_tokens += usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
         if usage:
             await log_usage(
@@ -216,7 +220,7 @@ def _extract_domain(url: str) -> str:
         return ""
 
 
-def score_single_result(result: dict, interests: str, ratings_context: str) -> tuple[dict | None, dict]:
+def score_single_result(result: dict, interests: str, ratings_context: str, api_key: str | None = None) -> tuple[dict | None, dict]:
     prompt = f"""Score this search result for relevance to the interests below.
 
 INTERESTS:
@@ -238,7 +242,7 @@ Return a JSON object with:
 Return ONLY the JSON object, no other text."""
 
     try:
-        text, usage = chat(prompt, max_tokens=300, model=settings.haiku_model)
+        text, usage = chat(prompt, max_tokens=300, model=settings.haiku_model, api_key=api_key)
         return extract_json_object(text), usage
     except Exception as exc:
         log.warning("google_search.score_error", title=result["title"][:60], error=str(exc))

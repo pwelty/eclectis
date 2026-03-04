@@ -13,6 +13,7 @@ import structlog
 from engine import db
 from engine.config import settings
 from engine.handlers import register
+from engine.services.byok import resolve_api_key
 from engine.services.claude import achat
 from engine.services.usage import log_usage
 
@@ -148,7 +149,7 @@ def _clean_text(text: str | None) -> str:
 # ── Core fetch + summarize ───────────────────────────────────────────────────
 
 
-async def _fetch_and_summarize(article_id: UUID, user_id: UUID) -> dict:
+async def _fetch_and_summarize(article_id: UUID, user_id: UUID, api_key: str | None = None) -> dict:
     """Fetch content via ScrapingBee, summarize with Claude. Returns result dict."""
     article = await db.fetchrow(
         "SELECT id, title, url, content, content_summary FROM articles WHERE id = $1 AND user_id = $2",
@@ -206,7 +207,7 @@ Article text:
 
         try:
             summary_text, _usage = await achat(
-                prompt, max_tokens=1500, model=settings.haiku_model,
+                prompt, max_tokens=1500, model=settings.haiku_model, api_key=api_key,
             )
             await log_usage(
                 user_id=user_id,
@@ -238,7 +239,10 @@ async def handle_fetch(*, command_id: UUID, payload: dict, user_id: UUID) -> dic
         raise ValueError("article_id is required")
     article_id = UUID(raw_id)
 
-    result = await _fetch_and_summarize(article_id, user_id)
+    # Resolve API key (BYOK gating)
+    api_key = await resolve_api_key(user_id)
+
+    result = await _fetch_and_summarize(article_id, user_id, api_key=api_key)
 
     if result["status"] == "not_found":
         raise ValueError(f"Article {article_id} not found")
@@ -251,6 +255,9 @@ async def handle_fetch(*, command_id: UUID, payload: dict, user_id: UUID) -> dic
 @register("article.batch_fetch")
 async def handle_batch(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
     """Fetch content for unfetched articles, ordered by AI score."""
+    # Resolve API key (BYOK gating)
+    api_key = await resolve_api_key(user_id)
+
     limit = payload.get("limit", 20)
 
     articles = await db.fetch(
@@ -269,7 +276,7 @@ async def handle_batch(*, command_id: UUID, payload: dict, user_id: UUID) -> dic
     errors = 0
     for row in articles:
         try:
-            result = await _fetch_and_summarize(row["id"], user_id)
+            result = await _fetch_and_summarize(row["id"], user_id, api_key=api_key)
             if result["status"] == "fetched":
                 fetched += 1
         except Exception as exc:

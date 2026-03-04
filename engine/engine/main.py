@@ -6,9 +6,11 @@ import asyncio
 import json
 import re
 from contextlib import asynccontextmanager
+from datetime import date, datetime, timedelta, timezone
+from uuid import UUID
 
 import structlog
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Query, Request
 from fastapi.responses import JSONResponse
 
 from engine import db
@@ -142,3 +144,118 @@ async def brevo_inbound(request: Request):
         processed += 1
 
     return {"ok": True, "processed": processed}
+
+
+# ── Admin helpers ─────────────────────────────────────────────────────────────
+
+
+def _verify_admin(request: Request) -> bool:
+    """Verify the request carries the Supabase service role key as Bearer token."""
+    key = settings.supabase_service_role_key
+    if not key:
+        return False
+    auth = request.headers.get("authorization", "")
+    token = auth.removeprefix("Bearer ").strip() if auth.startswith("Bearer ") else ""
+    return token == key
+
+
+# ── Admin: AI usage ───────────────────────────────────────────────────────────
+
+
+@app.get("/admin/usage")
+async def admin_usage(
+    request: Request,
+    user_id: str | None = Query(None, description="Filter by user ID"),
+    start_date: date | None = Query(None, description="Start date (inclusive)"),
+    end_date: date | None = Query(None, description="End date (inclusive)"),
+    rollup: str = Query("daily", description="Rollup period: daily or monthly"),
+):
+    """Query AI usage logs with daily/monthly rollups."""
+    if not _verify_admin(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+    # Build query with parameterised filters
+    conditions = []
+    params: list = []
+    idx = 0
+
+    if user_id:
+        try:
+            parsed_uid = UUID(user_id)
+        except ValueError:
+            return JSONResponse({"error": "invalid user_id"}, status_code=400)
+        idx += 1
+        conditions.append(f"user_id = ${idx}")
+        params.append(parsed_uid)
+
+    if start_date:
+        idx += 1
+        conditions.append(f"created_at >= ${idx}")
+        params.append(datetime(start_date.year, start_date.month, start_date.day, tzinfo=timezone.utc))
+
+    if end_date:
+        idx += 1
+        conditions.append(f"created_at < ${idx}")
+        # End date is inclusive — use start of next day for < comparison
+        end_dt = datetime(end_date.year, end_date.month, end_date.day, tzinfo=timezone.utc) + timedelta(days=1)
+        params.append(end_dt)
+
+    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+
+    if rollup == "monthly":
+        date_trunc = "month"
+    else:
+        date_trunc = "day"
+
+    query = f"""
+        SELECT
+            date_trunc('{date_trunc}', created_at) AS period,
+            user_id,
+            source,
+            model,
+            COUNT(*) AS call_count,
+            SUM(input_tokens) AS total_input_tokens,
+            SUM(output_tokens) AS total_output_tokens,
+            SUM(cost_usd) AS total_cost_usd
+        FROM ai_usage_logs
+        {where}
+        GROUP BY period, user_id, source, model
+        ORDER BY period DESC, total_cost_usd DESC
+    """
+
+    rows = await db.fetch(query, *params)
+
+    # Also get totals
+    totals_query = f"""
+        SELECT
+            COUNT(*) AS total_calls,
+            COALESCE(SUM(input_tokens), 0) AS total_input_tokens,
+            COALESCE(SUM(output_tokens), 0) AS total_output_tokens,
+            COALESCE(SUM(cost_usd), 0) AS total_cost_usd
+        FROM ai_usage_logs
+        {where}
+    """
+    totals = await db.fetchrow(totals_query, *params)
+
+    return {
+        "rollup": rollup,
+        "totals": {
+            "calls": totals["total_calls"],
+            "input_tokens": totals["total_input_tokens"],
+            "output_tokens": totals["total_output_tokens"],
+            "cost_usd": float(totals["total_cost_usd"]),
+        },
+        "rows": [
+            {
+                "period": row["period"].isoformat(),
+                "user_id": str(row["user_id"]),
+                "source": row["source"],
+                "model": row["model"],
+                "calls": row["call_count"],
+                "input_tokens": row["total_input_tokens"],
+                "output_tokens": row["total_output_tokens"],
+                "cost_usd": float(row["total_cost_usd"]),
+            }
+            for row in rows
+        ],
+    }

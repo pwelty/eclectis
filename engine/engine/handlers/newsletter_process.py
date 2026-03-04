@@ -15,6 +15,7 @@ import structlog
 from engine import db
 from engine.config import settings
 from engine.handlers import register
+from engine.services.byok import resolve_api_key
 from engine.services.claude import chat, extract_json_array
 from engine.services.usage import log_usage
 
@@ -146,9 +147,12 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
     # Build ratings context from votes
     ratings_context = await _build_ratings_context(user_id)
 
+    # Resolve API key (BYOK gating)
+    api_key = await resolve_api_key(user_id)
+
     # Score with Claude
     results, _usage = await asyncio.to_thread(
-        _score_with_claude, new_links, interests, ratings_context,
+        _score_with_claude, new_links, interests, ratings_context, api_key,
     )
     if _usage:
         await log_usage(
@@ -217,7 +221,7 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
     return {"links_found": len(links), "new": len(new_links), "saved": saved}
 
 
-def _score_with_claude(posts: list[dict], interests: str, ratings_context: str) -> tuple[list[dict], dict]:
+def _score_with_claude(posts: list[dict], interests: str, ratings_context: str, api_key: str | None = None) -> tuple[list[dict], dict]:
     """Score newsletter links for relevance using Claude."""
     posts_text = "\n".join(
         f"{i + 1}. Title: {p['title']} | URL: {p['url']}"
@@ -242,7 +246,7 @@ Score EVERY link for relevance. Return a JSON array with EXACTLY {len(posts)} el
 Return ONLY the JSON array."""
 
     try:
-        text, usage = chat(prompt, max_tokens=4000, model=settings.haiku_model)
+        text, usage = chat(prompt, max_tokens=4000, model=settings.haiku_model, api_key=api_key)
         results = extract_json_array(text)
         return results, usage
     except Exception as exc:

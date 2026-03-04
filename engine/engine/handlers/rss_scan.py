@@ -14,6 +14,7 @@ import structlog
 from engine import db
 from engine.config import settings
 from engine.handlers import register
+from engine.services.byok import resolve_api_key
 from engine.services.claude import chat, extract_json_array
 from engine.services.usage import log_usage
 
@@ -101,6 +102,9 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
         )
         return {"scan_log_id": str(scan_log_id), "feeds_scanned": feeds_scanned, "posts_saved": 0}
 
+    # Resolve API key (BYOK gating)
+    api_key = await resolve_api_key(user_id)
+
     # Build scoring context
     interests = await _get_interests(user_id)
     ratings_context = await _build_ratings_context(user_id)
@@ -111,7 +115,7 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
 
     for i in range(0, len(new_posts), BATCH_SIZE):
         batch = new_posts[i : i + BATCH_SIZE]
-        results, usage = await asyncio.to_thread(_filter_with_claude, batch, interests, ratings_context)
+        results, usage = await asyncio.to_thread(_filter_with_claude, batch, interests, ratings_context, api_key)
         total_tokens += usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
         if usage:
             await log_usage(
@@ -291,7 +295,7 @@ async def _fetch_feed(client: httpx.AsyncClient, feed, days_back: int) -> list[d
     return posts
 
 
-def _filter_with_claude(posts: list[dict], interests: str, ratings_context: str) -> tuple[list[dict], dict]:
+def _filter_with_claude(posts: list[dict], interests: str, ratings_context: str, api_key: str | None = None) -> tuple[list[dict], dict]:
     if not posts:
         return [], {}
 
@@ -318,7 +322,7 @@ Score EVERY post for relevance. Return a JSON array with EXACTLY {len(posts)} el
 Return ONLY the JSON array, no other text."""
 
     try:
-        text, usage = chat(prompt, max_tokens=8000, model=settings.haiku_model)
+        text, usage = chat(prompt, max_tokens=8000, model=settings.haiku_model, api_key=api_key)
         results = extract_json_array(text)
         return results, usage
     except Exception as exc:

@@ -12,6 +12,7 @@ import structlog
 from engine import db
 from engine.config import settings
 from engine.handlers import register
+from engine.services.byok import resolve_api_key
 from engine.services.claude import chat, extract_json_object
 from engine.services.email import send_email
 from engine.services.usage import log_usage
@@ -74,6 +75,9 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
             f"   Tags: {tag_str}"
         )
 
+    # Resolve API key (BYOK gating)
+    api_key = await resolve_api_key(user_id)
+
     # Generate briefing with Claude
     briefing_data, briefing_usage = await asyncio.to_thread(
         _generate_briefing,
@@ -81,6 +85,7 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
         interests,
         user_name,
         len(articles),
+        api_key,
     )
     if briefing_usage:
         await log_usage(
@@ -122,7 +127,7 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
     return {"briefing_id": str(briefing_id), "sent": sent, "articles": len(articles)}
 
 
-def _generate_briefing(articles_text: str, interests: str, user_name: str, article_count: int) -> tuple[dict | None, dict]:
+def _generate_briefing(articles_text: str, interests: str, user_name: str, article_count: int, api_key: str | None = None) -> tuple[dict | None, dict]:
     greeting = f"Hi {user_name}" if user_name else "Hi"
 
     prompt = f"""Generate a daily intelligence briefing email from these curated articles.
@@ -159,7 +164,7 @@ Return a JSON object:
 Return ONLY the JSON object."""
 
     try:
-        text, usage = chat(prompt, max_tokens=4000, model=settings.haiku_model)
+        text, usage = chat(prompt, max_tokens=4000, model=settings.haiku_model, api_key=api_key)
         return extract_json_object(text), usage
     except Exception as exc:
         log.error("briefing.claude_error", error=str(exc))
