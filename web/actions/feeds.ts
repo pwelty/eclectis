@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { createServerClient, getUser } from "@/lib/supabase/server"
 import { getPlanLimits } from "@/lib/plans"
+import { normalizeUrl } from "@/lib/normalize-url"
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -70,6 +71,8 @@ export async function addFeed(formData: FormData) {
 
   if (!url) return { feed: null, error: "URL is required" }
 
+  const normalizedUrl = normalizeUrl(url)
+
   // Check plan feed limit
   const { data: profile } = await supabase
     .from("user_profiles")
@@ -92,7 +95,7 @@ export async function addFeed(formData: FormData) {
   const { data: feed, error } = await supabase
     .from("feeds")
     .upsert(
-      { user_id: user.id, name, url, type },
+      { user_id: user.id, name, url: normalizedUrl, type },
       { onConflict: "user_id,url" }
     )
     .select()
@@ -230,16 +233,6 @@ interface OPMLFeed {
   name: string
   type: "rss" | "podcast" | "newsletter"
   tags: string[]
-}
-
-function normalizeUrl(url: string): string {
-  try {
-    const parsed = new URL(url)
-    return (parsed.hostname.toLowerCase() + parsed.pathname + parsed.search)
-      .replace(/\/+$/, "")
-  } catch {
-    return url.toLowerCase().replace(/\/+$/, "")
-  }
 }
 
 function parseOPML(opmlText: string): OPMLFeed[] {
@@ -383,7 +376,7 @@ export async function importOPML(formData: FormData) {
   const rows = feeds.map((feed) => ({
     user_id: user.id,
     name: feed.name,
-    url: feed.url,
+    url: normalizeUrl(feed.url),
     type: feed.type,
     tags: feed.tags,
   }))
