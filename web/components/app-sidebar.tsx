@@ -32,7 +32,7 @@ const NAV_GROUPS = [
       { href: "/feeds", label: "RSS", icon: Rss },
       { href: "/newsletters", label: "Newsletters", icon: Mail },
       { href: "/podcasts", label: "Podcasts", icon: Headphones },
-      { href: "/search-terms", label: "Discovery", icon: Search },
+      { href: "/search-terms", label: "Search", icon: Search },
     ],
   },
   {
