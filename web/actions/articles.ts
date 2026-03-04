@@ -30,6 +30,7 @@ export async function getArticles({
     .from("articles")
     .select("*, votes(direction)", { count: "exact" })
     .eq("user_id", user.id)
+    .or("ai_score.is.null,ai_score.gt.0")
 
   // Sort
   if (sort === "newest") {
