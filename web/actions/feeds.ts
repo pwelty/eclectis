@@ -19,16 +19,22 @@ export interface Feed {
 
 // ── Get feeds ───────────────────────────────────────────────────────────
 
-export async function getFeeds(): Promise<{ feeds: Feed[]; error?: string }> {
+export async function getFeeds(type?: Feed["type"]): Promise<{ feeds: Feed[]; error?: string }> {
   const supabase = await createServerClient()
   const user = await getUser()
   if (!user) return { feeds: [], error: "Not authenticated" }
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("feeds")
     .select("*")
     .eq("user_id", user.id)
     .order("created_at")
+
+  if (type) {
+    query = query.eq("type", type)
+  }
+
+  const { data, error } = await query
 
   if (error) return { feeds: [], error: error.message }
 
@@ -79,6 +85,8 @@ export async function addFeed(formData: FormData) {
   if (error) return { feed: null, error: error.message }
 
   revalidatePath("/feeds")
+  revalidatePath("/newsletters")
+  revalidatePath("/podcasts")
   return { feed: feed as Feed }
 }
 
@@ -113,6 +121,8 @@ export async function updateFeed(feedId: string, formData: FormData) {
   if (error) return { error: error.message }
 
   revalidatePath("/feeds")
+  revalidatePath("/newsletters")
+  revalidatePath("/podcasts")
   return { success: true }
 }
 
@@ -132,6 +142,8 @@ export async function deleteFeed(feedId: string) {
   if (error) return { error: error.message }
 
   revalidatePath("/feeds")
+  revalidatePath("/newsletters")
+  revalidatePath("/podcasts")
   return { success: true }
 }
 
@@ -142,17 +154,56 @@ export async function triggerScan(feedId: string) {
   const user = await getUser()
   if (!user) return { error: "Not authenticated" }
 
+  // Look up feed type to dispatch correct command
+  const { data: feed } = await supabase
+    .from("feeds")
+    .select("type")
+    .eq("id", feedId)
+    .eq("user_id", user.id)
+    .single()
+
+  if (!feed) return { error: "Feed not found" }
+
+  // rss and podcast feeds use rss.scan; newsletters use newsletter.process
+  const commandType = feed.type === "newsletter" ? "newsletter.process" : "rss.scan"
+
   const { error } = await supabase
     .from("commands")
     .insert({
       user_id: user.id,
-      type: "rss.scan",
+      type: commandType,
       payload: { feed_id: feedId },
     })
 
   if (error) return { error: error.message }
 
   revalidatePath("/feeds")
+  revalidatePath("/newsletters")
+  revalidatePath("/podcasts")
+  return { success: true }
+}
+
+// ── Discover — scan all active feeds of a type ─────────────────────────
+
+export async function discoverAll(feedType: Feed["type"]) {
+  const supabase = await createServerClient()
+  const user = await getUser()
+  if (!user) return { error: "Not authenticated" }
+
+  const commandType = feedType === "newsletter" ? "newsletter.process" : "rss.scan"
+
+  const { error } = await supabase
+    .from("commands")
+    .insert({
+      user_id: user.id,
+      type: commandType,
+    })
+
+  if (error) return { error: error.message }
+
+  revalidatePath("/feeds")
+  revalidatePath("/newsletters")
+  revalidatePath("/podcasts")
   return { success: true }
 }
 
@@ -248,5 +299,7 @@ export async function importOPML(formData: FormData) {
   }
 
   revalidatePath("/feeds")
+  revalidatePath("/newsletters")
+  revalidatePath("/podcasts")
   return { imported, failed }
 }
