@@ -6,6 +6,9 @@ import { cn } from "@/lib/utils"
 import {
   Newspaper,
   Rss,
+  Mail,
+  Headphones,
+  Bookmark,
   Search,
   Send,
   Settings,
@@ -20,12 +23,15 @@ const NAV_GROUPS = [
     label: "Reading",
     items: [
       { href: "/articles", label: "Articles", icon: Newspaper },
+      { href: "/bookmarks", label: "Bookmarks", icon: Bookmark },
     ],
   },
   {
     label: "Sources",
     items: [
-      { href: "/feeds", label: "Feeds", icon: Rss },
+      { href: "/feeds", label: "RSS", icon: Rss },
+      { href: "/newsletters", label: "Newsletters", icon: Mail },
+      { href: "/podcasts", label: "Podcasts", icon: Headphones },
       { href: "/search-terms", label: "Discovery", icon: Search },
     ],
   },

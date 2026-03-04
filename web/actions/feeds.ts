@@ -19,16 +19,22 @@ export interface Feed {
 
 // ── Get feeds ───────────────────────────────────────────────────────────
 
-export async function getFeeds(): Promise<{ feeds: Feed[]; error?: string }> {
+export async function getFeeds(type?: Feed["type"]): Promise<{ feeds: Feed[]; error?: string }> {
   const supabase = await createServerClient()
   const user = await getUser()
   if (!user) return { feeds: [], error: "Not authenticated" }
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("feeds")
     .select("*")
     .eq("user_id", user.id)
     .order("created_at")
+
+  if (type) {
+    query = query.eq("type", type)
+  }
+
+  const { data, error } = await query
 
   if (error) return { feeds: [], error: error.message }
 
