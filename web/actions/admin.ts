@@ -1,7 +1,8 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { createServerClient, getUser } from "@/lib/supabase/server"
+import { cookies } from "next/headers"
+import { createServerClient, getRealUser } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -10,7 +11,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 async function requireAdmin() {
   const supabase = await createServerClient()
-  const user = await getUser()
+  const user = await getRealUser()
   if (!user) return { error: "Not authenticated" as const, user: null, supabase: null }
 
   const { data: profile } = await supabase
@@ -28,7 +29,7 @@ async function requireAdmin() {
 
 export async function checkIsAdmin(): Promise<boolean> {
   const supabase = await createServerClient()
-  const user = await getUser()
+  const user = await getRealUser()
   if (!user) return false
 
   const { data } = await supabase
@@ -74,32 +75,20 @@ export async function getAdminUsers(offset = 0, limit = 50) {
 
   const { data, count, error } = await admin
     .from("user_profiles")
-    .select(`
-      id,
-      name,
-      plan,
-      is_admin,
-      created_at,
-      updated_at,
-      subscription_status
-    `, { count: "exact" })
+    .select(
+      "id, name, plan, is_admin, created_at, updated_at, subscription_status",
+      { count: "exact" },
+    )
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1)
 
   if (error) return { error: error.message, users: [], total: 0 }
 
-  // Get feed and search term counts per user
   const userIds = (data ?? []).map((u: { id: string }) => u.id)
 
   const [feedCounts, searchCounts, emailLookup] = await Promise.all([
-    admin
-      .from("feeds")
-      .select("user_id")
-      .in("user_id", userIds),
-    admin
-      .from("search_terms")
-      .select("user_id")
-      .in("user_id", userIds),
+    admin.from("feeds").select("user_id").in("user_id", userIds),
+    admin.from("search_terms").select("user_id").in("user_id", userIds),
     admin.auth.admin.listUsers(),
   ])
 
@@ -118,20 +107,22 @@ export async function getAdminUsers(offset = 0, limit = 50) {
     emailMap[u.id] = u.email ?? ""
   }
 
-  const users = (data ?? []).map((u: {
-    id: string
-    name: string | null
-    plan: string
-    is_admin: boolean
-    created_at: string
-    updated_at: string
-    subscription_status: string | null
-  }) => ({
-    ...u,
-    email: emailMap[u.id] ?? "",
-    feedCount: feedCountMap[u.id] ?? 0,
-    searchTermCount: searchCountMap[u.id] ?? 0,
-  }))
+  const users = (data ?? []).map(
+    (u: {
+      id: string
+      name: string | null
+      plan: string
+      is_admin: boolean
+      created_at: string
+      updated_at: string
+      subscription_status: string | null
+    }) => ({
+      ...u,
+      email: emailMap[u.id] ?? "",
+      feedCount: feedCountMap[u.id] ?? 0,
+      searchTermCount: searchCountMap[u.id] ?? 0,
+    }),
+  )
 
   return { users, total: count ?? 0 }
 }
@@ -145,17 +136,36 @@ export async function getAdminUserDetail(userId: string) {
 
   const admin = createAdminClient()
 
-  const [profileRes, feedsRes, searchRes, commandsRes, emailLookup] = await Promise.all([
-    admin.from("user_profiles").select("id, name, plan, is_admin, interests, created_at, updated_at, stripe_customer_id, subscription_status, current_period_end, api_key").eq("id", userId).single(),
-    admin.from("feeds").select("id, title, url, created_at").eq("user_id", userId).order("created_at", { ascending: false }),
-    admin.from("search_terms").select("id, term, created_at").eq("user_id", userId).order("created_at", { ascending: false }),
-    admin.from("commands").select("id, type, status, error, created_at, completed_at").eq("user_id", userId).order("created_at", { ascending: false }).limit(20),
-    admin.auth.admin.getUserById(userId),
-  ])
+  const [profileRes, feedsRes, searchRes, commandsRes, emailLookup] =
+    await Promise.all([
+      admin
+        .from("user_profiles")
+        .select(
+          "id, name, plan, is_admin, interests, created_at, updated_at, stripe_customer_id, subscription_status, current_period_end, api_key",
+        )
+        .eq("id", userId)
+        .single(),
+      admin
+        .from("feeds")
+        .select("id, title, url, created_at")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false }),
+      admin
+        .from("search_terms")
+        .select("id, term, created_at")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false }),
+      admin
+        .from("commands")
+        .select("id, type, status, error, created_at, completed_at")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(20),
+      admin.auth.admin.getUserById(userId),
+    ])
 
   if (profileRes.error) return { error: profileRes.error.message }
 
-  // Strip sensitive fields — only send whether api_key is set, not its value
   const { api_key, ...safeProfile } = profileRes.data
   return {
     profile: { ...safeProfile, apiKeySet: !!api_key },
@@ -170,14 +180,24 @@ export async function getAdminUserDetail(userId: string) {
 
 export async function getAdminPipeline(offset = 0, limit = 50) {
   const auth = await requireAdmin()
-  if (auth.error) return { error: auth.error, commands: [], total: 0, counts: null, lastRun: null }
+  if (auth.error)
+    return {
+      error: auth.error,
+      commands: [],
+      total: 0,
+      counts: null,
+      lastRun: null,
+    }
 
   const admin = createAdminClient()
 
   const [commandsRes, countRes, typeStatsRes] = await Promise.all([
     admin
       .from("commands")
-      .select("id, user_id, type, status, error, attempt_count, max_attempts, started_at, completed_at, created_at", { count: "exact" })
+      .select(
+        "id, user_id, type, status, error, attempt_count, max_attempts, started_at, completed_at, created_at",
+        { count: "exact" },
+      )
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1),
     admin.rpc("admin_command_counts"),
@@ -187,18 +207,40 @@ export async function getAdminPipeline(offset = 0, limit = 50) {
       .order("completed_at", { ascending: false }),
   ])
 
-  if (commandsRes.error) return { error: commandsRes.error.message, commands: [], total: 0, counts: null, typeStats: [] }
+  if (commandsRes.error)
+    return {
+      error: commandsRes.error.message,
+      commands: [],
+      total: 0,
+      counts: null,
+      typeStats: [],
+    }
 
-  // Compute per-type stats: last completed time and counts
-  const typeMap: Record<string, { type: string; lastCompleted: string | null; completed: number; failed: number; pending: number }> = {}
+  const typeMap: Record<
+    string,
+    {
+      type: string
+      lastCompleted: string | null
+      completed: number
+      failed: number
+      pending: number
+    }
+  > = {}
   for (const row of typeStatsRes.data ?? []) {
     if (!typeMap[row.type]) {
-      typeMap[row.type] = { type: row.type, lastCompleted: null, completed: 0, failed: 0, pending: 0 }
+      typeMap[row.type] = {
+        type: row.type,
+        lastCompleted: null,
+        completed: 0,
+        failed: 0,
+        pending: 0,
+      }
     }
     const entry = typeMap[row.type]
     if (row.status === "completed") {
       entry.completed++
-      if (!entry.lastCompleted && row.completed_at) entry.lastCompleted = row.completed_at
+      if (!entry.lastCompleted && row.completed_at)
+        entry.lastCompleted = row.completed_at
     } else if (row.status === "failed") {
       entry.failed++
     } else {
@@ -210,7 +252,9 @@ export async function getAdminPipeline(offset = 0, limit = 50) {
     commands: commandsRes.data ?? [],
     total: commandsRes.count ?? 0,
     counts: countRes.data ?? null,
-    typeStats: Object.values(typeMap).sort((a, b) => a.type.localeCompare(b.type)),
+    typeStats: Object.values(typeMap).sort((a, b) =>
+      a.type.localeCompare(b.type),
+    ),
   }
 }
 
@@ -243,7 +287,6 @@ export async function getAdminUsage() {
 
   const admin = createAdminClient()
 
-  // Get usage summary by user
   const { data: byUser, error: byUserError } = await admin
     .from("ai_usage_logs")
     .select("user_id, cost_usd, input_tokens, output_tokens")
@@ -251,11 +294,18 @@ export async function getAdminUsage() {
 
   if (byUserError) return { error: byUserError.message }
 
-  // Aggregate by user
-  const userMap: Record<string, { cost: number; calls: number; inputTokens: number; outputTokens: number }> = {}
+  const userMap: Record<
+    string,
+    { cost: number; calls: number; inputTokens: number; outputTokens: number }
+  > = {}
   for (const row of byUser ?? []) {
     if (!userMap[row.user_id]) {
-      userMap[row.user_id] = { cost: 0, calls: 0, inputTokens: 0, outputTokens: 0 }
+      userMap[row.user_id] = {
+        cost: 0,
+        calls: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+      }
     }
     userMap[row.user_id].cost += Number(row.cost_usd)
     userMap[row.user_id].calls += 1
@@ -264,9 +314,11 @@ export async function getAdminUsage() {
   }
 
   const totalCost = Object.values(userMap).reduce((sum, u) => sum + u.cost, 0)
-  const totalCalls = Object.values(userMap).reduce((sum, u) => sum + u.calls, 0)
+  const totalCalls = Object.values(userMap).reduce(
+    (sum, u) => sum + u.calls,
+    0,
+  )
 
-  // Get user names for display
   const userIds = Object.keys(userMap)
   const { data: profiles } = await admin
     .from("user_profiles")
@@ -291,5 +343,91 @@ export async function getAdminUsage() {
     totalCost,
     totalCalls,
     byUser: byUserList,
+  }
+}
+
+// ── Impersonation ─────────────────────────────────────────────────────────
+
+export async function getImpersonatableUsers() {
+  const auth = await requireAdmin()
+  if (auth.error) return { error: auth.error, users: [] }
+
+  const admin = createAdminClient()
+
+  const { data: profiles } = await admin
+    .from("user_profiles")
+    .select("id, name, plan")
+    .order("name", { ascending: true })
+
+  const { data: authData } = await admin.auth.admin.listUsers()
+
+  const emailMap: Record<string, string> = {}
+  for (const u of authData?.users ?? []) {
+    emailMap[u.id] = u.email ?? ""
+  }
+
+  const users = (profiles ?? []).map(
+    (p: { id: string; name: string | null; plan: string }) => ({
+      id: p.id,
+      name: p.name,
+      email: emailMap[p.id] ?? "",
+      plan: p.plan,
+    }),
+  )
+
+  return { users }
+}
+
+export async function setImpersonation(userId: string) {
+  if (!UUID_RE.test(userId)) return { error: "Invalid user ID" }
+  const isAdmin = await checkIsAdmin()
+  if (!isAdmin) return { error: "Unauthorized" }
+
+  const cookieStore = await cookies()
+  cookieStore.set("x-impersonate-user", userId, {
+    path: "/",
+    httpOnly: true,
+    sameSite: "lax",
+    maxAge: 60 * 60 * 4, // 4 hours
+  })
+
+  revalidatePath("/", "layout")
+  return { success: true }
+}
+
+export async function clearImpersonation() {
+  const cookieStore = await cookies()
+  cookieStore.delete("x-impersonate-user")
+
+  revalidatePath("/", "layout")
+  return { success: true }
+}
+
+export async function getImpersonationState() {
+  const isAdmin = await checkIsAdmin()
+  if (!isAdmin) return { isAdmin: false, impersonating: null }
+
+  const cookieStore = await cookies()
+  const impersonateId = cookieStore.get("x-impersonate-user")?.value ?? null
+
+  if (!impersonateId) return { isAdmin: true, impersonating: null }
+
+  const admin = createAdminClient()
+  const [{ data: profile }, { data: authData }] = await Promise.all([
+    admin
+      .from("user_profiles")
+      .select("name")
+      .eq("id", impersonateId)
+      .single(),
+    admin.auth.admin.getUserById(impersonateId),
+  ])
+
+  return {
+    isAdmin: true,
+    impersonating: {
+      id: impersonateId,
+      name: profile?.name ?? null,
+      email: authData?.user?.email ?? "",
+    },
   }
 }

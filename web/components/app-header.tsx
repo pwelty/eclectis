@@ -19,6 +19,7 @@ import {
   Settings,
 } from "lucide-react"
 import { Logo } from "@/components/logo"
+import { AdminUserSelector } from "@/components/admin-user-selector"
 
 const NAV_GROUPS = [
   {
@@ -52,13 +53,18 @@ const NAV_GROUPS = [
   },
 ] as const
 
-export function AppHeader({ email }: { email: string }) {
+interface AppHeaderProps {
+  email: string
+  isAdmin?: boolean
+  impersonating?: { id: string; name: string | null; email: string } | null
+}
+
+export function AppHeader({ email, isAdmin, impersonating }: AppHeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const pathname = usePathname()
 
-  // Close menu on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
@@ -69,7 +75,6 @@ export function AppHeader({ email }: { email: string }) {
     return () => document.removeEventListener("mousedown", handleClick)
   }, [menuOpen])
 
-  // Close mobile nav on route change
   useEffect(() => {
     setMobileNavOpen(false)
   }, [pathname])
@@ -77,7 +82,6 @@ export function AppHeader({ email }: { email: string }) {
   return (
     <>
       <header className="flex h-14 shrink-0 items-center border-b border-border bg-background px-4">
-        {/* Mobile menu button */}
         <button
           className="mr-3 md:hidden"
           onClick={() => setMobileNavOpen(!mobileNavOpen)}
@@ -89,7 +93,6 @@ export function AppHeader({ email }: { email: string }) {
           )}
         </button>
 
-        {/* Brand */}
         <Link href="/articles" className="flex items-center gap-2 text-base font-semibold text-foreground">
           <Logo className="size-6" />
           Eclectis
@@ -97,7 +100,10 @@ export function AppHeader({ email }: { email: string }) {
 
         <div className="flex-1" />
 
-        {/* User menu */}
+        {isAdmin && (
+          <AdminUserSelector impersonating={impersonating ?? null} />
+        )}
+
         <div ref={menuRef} className="relative">
           <Button
             variant="ghost"
@@ -125,7 +131,6 @@ export function AppHeader({ email }: { email: string }) {
         </div>
       </header>
 
-      {/* Mobile navigation overlay */}
       {mobileNavOpen && (
         <nav className="border-b border-border bg-background px-4 py-2 md:hidden">
           <div className="space-y-3">
