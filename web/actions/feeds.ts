@@ -16,6 +16,7 @@ export interface Feed {
   last_scanned_at: string | null
   created_at: string
   sender_email?: string | null
+  tags?: string[]
 }
 
 export interface Article {
@@ -228,6 +229,114 @@ interface OPMLFeed {
   url: string
   name: string
   type: "rss" | "podcast" | "newsletter"
+  tags: string[]
+}
+
+function normalizeUrl(url: string): string {
+  try {
+    const parsed = new URL(url)
+    return (parsed.hostname.toLowerCase() + parsed.pathname + parsed.search)
+      .replace(/\/+$/, "")
+  } catch {
+    return url.toLowerCase().replace(/\/+$/, "")
+  }
+}
+
+function parseOPML(opmlText: string): OPMLFeed[] {
+  const feedMap = new Map<string, OPMLFeed>()
+
+  // Helper to extract an attribute value from an outline tag string
+  function getAttr(tag: string, attr: string): string | null {
+    const re = new RegExp(`${attr}\\s*=\\s*"([^"]*)"`, "i")
+    return tag.match(re)?.[1] ?? null
+  }
+
+  // Helper to parse a leaf outline into an OPMLFeed entry (without tags)
+  function parseLeaf(tag: string): { url: string; name: string; type: "rss" | "podcast" | "newsletter" } | null {
+    const xmlUrl = getAttr(tag, "xmlUrl")
+    if (!xmlUrl) return null
+
+    // Skip non-HTTP URLs (e.g. email addresses, bare domains)
+    if (!/^https?:\/\//i.test(xmlUrl)) return null
+
+    const name = getAttr(tag, "title") || getAttr(tag, "text") || xmlUrl
+    const typeAttr = getAttr(tag, "type")?.toLowerCase()
+    let type: "rss" | "podcast" | "newsletter" = "rss"
+    if (typeAttr === "podcast" || xmlUrl.includes("podcast")) {
+      type = "podcast"
+    }
+
+    return { url: xmlUrl, name, type }
+  }
+
+  // First pass: find folder outlines and their children
+  // A folder outline has text/title but no xmlUrl, and contains child outlines
+  const folderRegex = /<outline\s+[^>]*?(?:text|title)\s*=\s*"([^"]*)"[^>]*>[\s\S]*?<\/outline>/gi
+  let folderMatch
+
+  while ((folderMatch = folderRegex.exec(opmlText)) !== null) {
+    const fullBlock = folderMatch[0]
+    const folderTag = fullBlock.match(/<outline[^>]*>/i)?.[0] ?? ""
+
+    // Skip if this outline itself has xmlUrl (it's a leaf, not a folder)
+    if (getAttr(folderTag, "xmlUrl")) continue
+
+    const folderName = getAttr(folderTag, "text") || getAttr(folderTag, "title") || ""
+
+    // Find child outlines with xmlUrl inside this folder
+    const childRegex = /<outline[^>]*xmlUrl\s*=\s*"[^"]*"[^>]*\/?>/gi
+    let childMatch
+
+    while ((childMatch = childRegex.exec(fullBlock)) !== null) {
+      const childTag = childMatch[0]
+      const leaf = parseLeaf(childTag)
+      if (!leaf) continue
+
+      const key = normalizeUrl(leaf.url)
+      const existing = feedMap.get(key)
+      if (existing) {
+        // Merge tag if not already present
+        if (folderName && !existing.tags.includes(folderName)) {
+          existing.tags.push(folderName)
+        }
+      } else {
+        feedMap.set(key, {
+          ...leaf,
+          tags: folderName ? [folderName] : [],
+        })
+      }
+    }
+  }
+
+  // Second pass: extract top-level feeds (not inside any folder)
+  // These are self-closing outlines with xmlUrl that are direct children of <body>
+  const topLevelRegex = /<body[^>]*>([\s\S]*)<\/body>/i
+  const bodyMatch = opmlText.match(topLevelRegex)
+  if (bodyMatch) {
+    const bodyContent = bodyMatch[1]
+    // Match self-closing outline tags at the top level of body
+    // We strip out folder blocks first to isolate top-level entries
+    const stripped = bodyContent.replace(/<outline\s+[^>]*?(?:text|title)\s*=\s*"[^"]*"[^>]*>[\s\S]*?<\/outline>/gi, (match) => {
+      const tag = match.match(/<outline[^>]*>/i)?.[0] ?? ""
+      // Only strip if it's a folder (no xmlUrl on the parent)
+      return getAttr(tag, "xmlUrl") ? match : ""
+    })
+
+    const leafRegex = /<outline[^>]*xmlUrl\s*=\s*"[^"]*"[^>]*\/?>/gi
+    let leafMatch
+
+    while ((leafMatch = leafRegex.exec(stripped)) !== null) {
+      const leaf = parseLeaf(leafMatch[0])
+      if (!leaf) continue
+
+      const key = normalizeUrl(leaf.url)
+      if (!feedMap.has(key)) {
+        feedMap.set(key, { ...leaf, tags: [] })
+      }
+    }
+  }
+
+  return Array.from(feedMap.values())
 }
 
 export async function importOPML(formData: FormData) {
@@ -238,31 +347,8 @@ export async function importOPML(formData: FormData) {
   const opmlText = (formData.get("opml") as string)?.trim()
   if (!opmlText) return { imported: 0, failed: 0, error: "No OPML content" }
 
-  // Parse OPML on the server side using regex since DOMParser is not
-  // available in Node. We extract outline elements with xmlUrl attributes.
-  const feeds: OPMLFeed[] = []
-  const outlineRegex = /<outline[^>]*xmlUrl\s*=\s*"([^"]*)"[^>]*>/gi
-  let match
-
-  while ((match = outlineRegex.exec(opmlText)) !== null) {
-    const fullTag = match[0]
-    const xmlUrl = match[1]
-    if (!xmlUrl) continue
-
-    // Extract title or text attribute
-    const titleMatch = fullTag.match(/title\s*=\s*"([^"]*)"/i)
-    const textMatch = fullTag.match(/text\s*=\s*"([^"]*)"/i)
-    const name = titleMatch?.[1] || textMatch?.[1] || xmlUrl
-
-    // Detect type from the outline attributes or URL
-    const typeAttr = fullTag.match(/type\s*=\s*"([^"]*)"/i)?.[1]?.toLowerCase()
-    let type: "rss" | "podcast" | "newsletter" = "rss"
-    if (typeAttr === "podcast" || xmlUrl.includes("podcast")) {
-      type = "podcast"
-    }
-
-    feeds.push({ url: xmlUrl, name, type })
-  }
+  // Parse OPML with folder-aware extraction, URL dedup, and tag merging
+  const feeds = parseOPML(opmlText)
 
   if (feeds.length === 0) {
     return { imported: 0, failed: 0, error: "No feeds found in OPML file" }
@@ -300,7 +386,7 @@ export async function importOPML(formData: FormData) {
     const { error } = await supabase
       .from("feeds")
       .upsert(
-        { user_id: user.id, name: feed.name, url: feed.url, type: feed.type },
+        { user_id: user.id, name: feed.name, url: feed.url, type: feed.type, tags: feed.tags },
         { onConflict: "user_id,url" }
       )
       .select()
