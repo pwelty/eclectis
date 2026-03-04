@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 import { createServerClient, getUser } from "@/lib/supabase/server"
+import { trackEvent } from "@/actions/engagement"
 
 const PAGE_SIZE = 20
 
@@ -108,6 +109,12 @@ export async function vote(articleId: string, direction: "thumbs_up" | "thumbs_d
     })
   }
 
+  // Track engagement event (fire-and-forget, don't block the response)
+  if (!existing || existing.direction !== direction) {
+    const eventType = direction === "thumbs_up" ? "vote_up" : "vote_down"
+    trackEvent(eventType, articleId).catch(() => {})
+  }
+
   revalidatePath("/articles")
   return { success: true }
 }
@@ -133,6 +140,8 @@ export async function toggleBookmark(articleId: string) {
     .eq("id", articleId)
     .eq("user_id", user.id)
 
+  trackEvent(article.bookmarked ? "unbookmark" : "bookmark", articleId).catch(() => {})
+
   revalidatePath("/articles")
   return { bookmarked: !article.bookmarked }
 }
@@ -147,6 +156,8 @@ export async function markAsRead(articleId: string) {
     .update({ status: "read" })
     .eq("id", articleId)
     .eq("user_id", user.id)
+
+  trackEvent("mark_read", articleId).catch(() => {})
 
   return { success: true }
 }

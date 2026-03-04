@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import { createServerClient, getUser } from "@/lib/supabase/server"
 import { getPlanLimits } from "@/lib/plans"
 import { normalizeUrl } from "@/lib/normalize-url"
+import { trackEvent } from "@/actions/engagement"
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -131,6 +132,10 @@ export async function updateFeed(feedId: string, formData: FormData) {
     return { error: "No fields to update" }
   }
 
+  if (updates.active === false) {
+    trackEvent("feed_disable", undefined, feedId).catch(() => {})
+  }
+
   const { error } = await supabase
     .from("feeds")
     .update(updates)
@@ -151,6 +156,8 @@ export async function deleteFeed(feedId: string) {
   const supabase = await createServerClient()
   const user = await getUser()
   if (!user) return { error: "Not authenticated" }
+
+  trackEvent("feed_delete", undefined, feedId).catch(() => {})
 
   const { error } = await supabase
     .from("feeds")
