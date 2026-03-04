@@ -107,6 +107,9 @@ export function FeedList({ feedType, title, description, showOPML = false, showS
   const [discovering, setDiscovering] = useState(false)
   const [discovered, setDiscovered] = useState(false)
 
+  // Tag filter state
+  const [selectedTags, setSelectedTags] = useState<string[]>([])
+
   // Admin state
   const [isAdmin, setIsAdmin] = useState(false)
 
@@ -298,6 +301,21 @@ export function FeedList({ feedType, title, description, showOPML = false, showS
     })
   }
 
+  // ── Derived: tags + filtered feeds ────────────────────────────────
+
+  const allTags = [...new Set(feeds.flatMap((f) => f.tags ?? []))].sort()
+
+  const filteredFeeds =
+    selectedTags.length > 0
+      ? feeds.filter((f) => f.tags?.some((t) => selectedTags.includes(t)))
+      : feeds
+
+  const toggleTag = useCallback((tag: string) => {
+    setSelectedTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+    )
+  }, [])
+
   // ── Loading / error states ────────────────────────────────────────
 
   if (loading) {
@@ -429,8 +447,39 @@ export function FeedList({ feedType, title, description, showOPML = false, showS
         )}
       </div>
 
+      {/* Tag filter bar */}
+      {allTags.length > 0 && (
+        <div className="mb-4 flex flex-wrap gap-1 rounded-lg bg-muted p-1">
+          <button
+            onClick={() => setSelectedTags([])}
+            className={cn(
+              "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+              selectedTags.length === 0
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            All
+          </button>
+          {allTags.map((tag) => (
+            <button
+              key={tag}
+              onClick={() => toggleTag(tag)}
+              className={cn(
+                "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                selectedTags.includes(tag)
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {tag}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Feed list */}
-      {feeds.length === 0 ? (
+      {filteredFeeds.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border bg-secondary/30 px-4 py-12 text-center">
           <EmptyIcon className="mx-auto size-8 text-muted-foreground/50" />
           <p className="mt-3 text-sm font-medium text-foreground">
@@ -458,7 +507,7 @@ export function FeedList({ feedType, title, description, showOPML = false, showS
           </div>
 
           <div className="divide-y divide-border">
-            {feeds.map((feed) => (
+            {filteredFeeds.map((feed) => (
               <FeedRow
                 key={feed.id}
                 feed={feed}
@@ -482,10 +531,11 @@ export function FeedList({ feedType, title, description, showOPML = false, showS
         </div>
       )}
 
-      {feeds.length > 0 && (
+      {filteredFeeds.length > 0 && (
         <div className="mt-3 text-right text-xs text-muted-foreground">
-          {feeds.length} source{feeds.length !== 1 ? "s" : ""} &middot;{" "}
-          {feeds.filter((f) => f.active).length} active
+          {filteredFeeds.length} source{filteredFeeds.length !== 1 ? "s" : ""}
+          {selectedTags.length > 0 && ` of ${feeds.length}`} &middot;{" "}
+          {filteredFeeds.filter((f) => f.active).length} active
         </div>
       )}
     </div>
