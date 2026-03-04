@@ -33,3 +33,4 @@ from engine.handlers import article_score  # noqa: E402, F401
 from engine.handlers import briefing_generate  # noqa: E402, F401
 from engine.handlers import newsletter_process  # noqa: E402, F401
 from engine.handlers import daily_pipeline  # noqa: E402, F401
+from engine.handlers import user_learn  # noqa: E402, F401
