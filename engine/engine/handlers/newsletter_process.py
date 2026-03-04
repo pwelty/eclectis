@@ -1,28 +1,29 @@
-"""newsletter.process — Parse inbound newsletter email, extract links, create articles."""
+"""newsletter.process — Parse inbound newsletter, detect type, queue article.add.
+
+Detects whether the newsletter is a content newsletter (the body IS the article)
+or a link newsletter (a roundup/digest with links to external articles). Then
+queues article.add for each article found — no scoring or fetching here.
+"""
 
 from __future__ import annotations
 
-import asyncio
 import json
 import re
-from datetime import datetime, timezone
 from html.parser import HTMLParser
 from urllib.parse import urlparse
 from uuid import UUID
 
+import html2text
 import structlog
 
 from engine import db
-from engine.config import settings
 from engine.handlers import register
-from engine.services.byok import resolve_api_key
-from engine.services.claude import chat, extract_json_array
-from engine.services.usage import log_usage
 
 log = structlog.get_logger()
 
 MAX_LINKS = 20
-MIN_SCORE = 6
+CONTENT_LINK_THRESHOLD = 3   # <= this many links may indicate content newsletter
+CONTENT_WORD_THRESHOLD = 200  # must have >= this many words to be content
 
 # Domains to skip (social, shorteners)
 SKIP_DOMAINS = {
@@ -36,6 +37,9 @@ SKIP_PATTERNS = re.compile(
     r"beehiiv\.com/(subscribe|unsubscribe)|substack\.com/(subscribe|account))",
     re.IGNORECASE,
 )
+
+
+# ── HTML parsing helpers ─────────────────────────────────────────────────────
 
 
 class _LinkExtractor(HTMLParser):
@@ -103,6 +107,35 @@ def _extract_links(html: str) -> list[dict]:
     return results
 
 
+def _html_to_text(html: str) -> str:
+    """Convert newsletter HTML to clean plain text."""
+    h = html2text.HTML2Text()
+    h.body_width = 0
+    h.ignore_images = True
+    h.ignore_links = True
+    h.ignore_emphasis = False
+    text = h.handle(html)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def _detect_newsletter_type(html: str, links: list[dict]) -> str:
+    """Detect whether a newsletter is 'content' or 'links'.
+
+    Content newsletter: few outbound links, substantial body text.
+    Link newsletter: many outbound links, short intros between them.
+    """
+    plain_text = _html_to_text(html)
+    word_count = len(plain_text.split())
+
+    if len(links) <= CONTENT_LINK_THRESHOLD and word_count >= CONTENT_WORD_THRESHOLD:
+        return "content"
+    return "links"
+
+
+# ── Handler ──────────────────────────────────────────────────────────────────
+
+
 @register("newsletter.process")
 async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
     subject = payload.get("subject", "Newsletter")
@@ -116,168 +149,49 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
     if not html:
         return {"status": "error", "reason": "No HTML body"}
 
-    if feed_id:
-        feed_id = UUID(feed_id) if isinstance(feed_id, str) else feed_id
-
-    # Extract links from newsletter HTML
+    # Classify newsletter
     links = _extract_links(html)
-    bound_log.info("newsletter.links_extracted", count=len(links))
+    newsletter_type = _detect_newsletter_type(html, links)
+    bound_log.info("newsletter.classified", type=newsletter_type, links=len(links))
 
-    if not links:
-        return {"status": "no_links", "links_found": 0, "saved": 0}
+    queued = 0
 
-    # Bulk dedup against processed_posts
-    all_urls = [link["url"] for link in links]
-    already_processed = await db.fetch(
-        "SELECT DISTINCT url FROM processed_posts WHERE user_id = $1 AND url = ANY($2)",
-        user_id,
-        all_urls,
-    )
-    seen_urls = {r["url"] for r in already_processed}
-    new_links = [link for link in links if link["url"] not in seen_urls]
-
-    if not new_links:
-        bound_log.info("newsletter.all_seen", total=len(links))
-        return {"status": "all_seen", "links_found": len(links), "saved": 0}
-
-    # Get user interests for scoring
-    profile = await db.fetchrow("SELECT interests FROM user_profiles WHERE id = $1", user_id)
-    interests = (profile["interests"] or "") if profile else ""
-
-    # Build ratings context from votes
-    ratings_context = await _build_ratings_context(user_id)
-
-    # Resolve API key (BYOK gating)
-    api_key = await resolve_api_key(user_id)
-
-    # Score with Claude
-    results, _usage = await asyncio.to_thread(
-        _score_with_claude, new_links, interests, ratings_context, api_key,
-    )
-    if _usage:
-        await log_usage(
-            user_id=user_id,
-            model=_usage.get("model", settings.haiku_model),
-            input_tokens=_usage.get("input_tokens", 0),
-            output_tokens=_usage.get("output_tokens", 0),
-            source="newsletter_process",
-        )
-
-    saved = 0
-    for idx, result in enumerate(results):
-        score = result.get("score")
-        if not score or idx >= len(new_links):
-            continue
-
-        post = new_links[idx]
-
-        # Save high-scoring articles
-        if score >= MIN_SCORE:
-            try:
-                await db.execute(
-                    """
-                    INSERT INTO articles (user_id, feed_id, title, url, source, content_type,
-                                          ai_score, ai_reason, tags, status, published_at, found_at)
-                    VALUES ($1, $2, $3, $4, 'newsletter', 'newsletter', $5, $6, $7, 'to_read', NOW(), NOW())
-                    ON CONFLICT (user_id, url) DO NOTHING
-                    """,
-                    user_id,
-                    feed_id,
-                    post["title"],
-                    post["url"],
-                    score,
-                    result.get("reason"),
-                    json.dumps(result.get("tags", [])),
-                )
-                saved += 1
-            except Exception as exc:
-                log.warning("newsletter.save_error", url=post["url"], error=str(exc))
-
-        # Mark as processed
+    if newsletter_type == "content":
+        # The newsletter IS the article — queue article.add with body content
+        plain_text = _html_to_text(html)
         await db.execute(
             """
-            INSERT INTO processed_posts (user_id, url, saved, processed_at)
-            VALUES ($1, $2, $3, NOW())
-            ON CONFLICT (user_id, url) DO NOTHING
+            INSERT INTO commands (type, user_id, payload)
+            VALUES ('article.add', $1, $2)
             """,
             user_id,
-            post["url"],
-            score >= MIN_SCORE,
+            json.dumps({
+                "title": subject,
+                "content": plain_text[:100_000],
+                "source": "newsletter",
+                "feed_id": feed_id,
+                "content_type": "newsletter",
+            }),
         )
+        queued = 1
+    else:
+        # Link newsletter — queue article.add for each extracted link
+        for link in links:
+            await db.execute(
+                """
+                INSERT INTO commands (type, user_id, payload)
+                VALUES ('article.add', $1, $2)
+                """,
+                user_id,
+                json.dumps({
+                    "url": link["url"],
+                    "title": link["title"],
+                    "source": "newsletter",
+                    "feed_id": feed_id,
+                    "content_type": "article",
+                }),
+            )
+            queued += 1
 
-    # Auto-queue article.batch_fetch if we saved articles
-    if saved > 0:
-        await db.execute(
-            """
-            INSERT INTO commands (type, user_id, payload, idempotency_key)
-            VALUES ('article.batch_fetch', $1, '{"limit": 20}', $2)
-            ON CONFLICT (idempotency_key) DO NOTHING
-            """,
-            user_id,
-            f"newsletter-fetch-{user_id}-{datetime.now(timezone.utc).strftime('%Y%m%d')}",
-        )
-
-    bound_log.info("newsletter.done", links_found=len(links), new=len(new_links), saved=saved)
-    return {"links_found": len(links), "new": len(new_links), "saved": saved}
-
-
-def _score_with_claude(posts: list[dict], interests: str, ratings_context: str, api_key: str | None = None) -> tuple[list[dict], dict]:
-    """Score newsletter links for relevance using Claude."""
-    posts_text = "\n".join(
-        f"{i + 1}. Title: {p['title']} | URL: {p['url']}"
-        for i, p in enumerate(posts)
-    )
-
-    prompt = f"""You are filtering links extracted from email newsletters for relevance to specific interests.
-
-INTERESTS:
-{interests or "General technology and business"}
-
-{ratings_context}
-
-LINKS TO EVALUATE:
-{posts_text}
-
-Score EVERY link for relevance. Return a JSON array with EXACTLY {len(posts)} elements, one per link, in the SAME ORDER. Each element:
-- "score": relevance score 1-10
-- "reason": brief explanation (1-2 sentences)
-- "tags": array of up to 3 topic tags
-
-Return ONLY the JSON array."""
-
-    try:
-        text, usage = chat(prompt, max_tokens=4000, model=settings.haiku_model, api_key=api_key)
-        results = extract_json_array(text)
-        return results, usage
-    except Exception as exc:
-        log.error("newsletter.claude_error", error=str(exc))
-        return [], {}
-
-
-async def _build_ratings_context(user_id: UUID) -> str:
-    """Build context from user's article votes for better scoring."""
-    rows = await db.fetch(
-        """
-        SELECT a.title, v.direction
-        FROM votes v JOIN articles a ON a.id = v.article_id
-        WHERE v.user_id = $1
-        ORDER BY v.created_at DESC LIMIT 20
-        """,
-        user_id,
-    )
-    if not rows:
-        return ""
-
-    liked = [r for r in rows if r["direction"] == "thumbs_up"]
-    disliked = [r for r in rows if r["direction"] == "thumbs_down"]
-
-    parts = ["\nLEARN FROM THESE USER RATINGS:"]
-    if liked:
-        parts.append("\nARTICLES THE USER LIKED:")
-        for a in liked:
-            parts.append(f'- "{a["title"]}"')
-    if disliked:
-        parts.append("\nARTICLES THE USER DISLIKED:")
-        for a in disliked:
-            parts.append(f'- "{a["title"]}"')
-    return "\n".join(parts)
+    bound_log.info("newsletter.done", type=newsletter_type, queued=queued)
+    return {"type": newsletter_type, "links_found": len(links), "queued": queued}

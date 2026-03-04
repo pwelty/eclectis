@@ -1,9 +1,10 @@
-"""article.fetch_content / article.batch_fetch — Fetch article content via ScrapingBee + summarize."""
+"""article.fetch / article.fetch_content / article.batch_fetch — Fetch article content via ScrapingBee + summarize."""
 
 from __future__ import annotations
 
 import json
 import re
+from datetime import datetime, timezone
 from uuid import UUID
 
 import html2text
@@ -231,9 +232,9 @@ Article text:
 # ── Handlers ─────────────────────────────────────────────────────────────────
 
 
-@register("article.fetch_content")
+@register("article.fetch")
 async def handle_fetch(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
-    """Fetch content for a single article."""
+    """Fetch content for a single article, then queue article.score."""
     raw_id = payload.get("article_id")
     if not raw_id:
         raise ValueError("article_id is required")
@@ -249,7 +250,18 @@ async def handle_fetch(*, command_id: UUID, payload: dict, user_id: UUID) -> dic
     if result["status"] == "no_api_key":
         raise ValueError("SCRAPINGBEE_API_KEY not configured")
 
+    # Queue scoring if we got content
+    if result["status"] == "fetched":
+        await _queue_score(user_id, article_id)
+
     return result
+
+
+# Keep old name for backward compatibility with existing commands in the queue
+@register("article.fetch_content")
+async def handle_fetch_compat(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
+    """Backward-compatible alias for article.fetch."""
+    return await handle_fetch(command_id=command_id, payload=payload, user_id=user_id)
 
 
 @register("article.batch_fetch")
@@ -279,9 +291,24 @@ async def handle_batch(*, command_id: UUID, payload: dict, user_id: UUID) -> dic
             result = await _fetch_and_summarize(row["id"], user_id, api_key=api_key)
             if result["status"] == "fetched":
                 fetched += 1
+                await _queue_score(user_id, row["id"])
         except Exception as exc:
             errors += 1
             log.warning("article.batch_fetch_error", article_id=str(row["id"]), error=str(exc))
 
     log.info("article.batch_fetch_done", fetched=fetched, errors=errors, total=len(articles))
     return {"fetched": fetched, "errors": errors, "total": len(articles)}
+
+
+async def _queue_score(user_id: UUID, article_id: UUID) -> None:
+    """Queue article.score for a fetched article."""
+    await db.execute(
+        """
+        INSERT INTO commands (type, user_id, payload, idempotency_key)
+        VALUES ('article.score', $1, $2, $3)
+        ON CONFLICT (idempotency_key) DO NOTHING
+        """,
+        user_id,
+        json.dumps({"article_id": str(article_id)}),
+        f"score-{article_id}",
+    )
