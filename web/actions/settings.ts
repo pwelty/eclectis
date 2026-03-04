@@ -136,6 +136,37 @@ export async function updateBriefingPreferences(formData: FormData) {
   return { success: true }
 }
 
+// ── Timezone ──────────────────────────────────────────────────────────
+
+export async function updateTimezone(formData: FormData) {
+  const supabase = await createServerClient()
+  const user = await getUser()
+  if (!user) return { error: "Not authenticated" }
+
+  const timezone = formData.get("timezone") as string
+  if (!timezone) return { error: "Timezone is required" }
+
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("preferences")
+    .eq("id", user.id)
+    .single()
+
+  const currentPrefs = (profile?.preferences as Record<string, unknown>) ?? {}
+
+  const { error } = await supabase
+    .from("user_profiles")
+    .update({
+      preferences: { ...currentPrefs, timezone },
+    })
+    .eq("id", user.id)
+
+  if (error) return { error: error.message }
+
+  revalidatePath("/settings")
+  return { success: true }
+}
+
 // ── Update password ────────────────────────────────────────────────────────
 
 export async function updatePassword(formData: FormData) {

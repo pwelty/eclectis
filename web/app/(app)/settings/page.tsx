@@ -12,6 +12,7 @@ import {
   saveApiKey,
   removeApiKey,
   updateBriefingPreferences,
+  updateTimezone,
   updatePassword,
 } from "@/actions/settings"
 import {
@@ -24,6 +25,7 @@ import {
   Mail,
   Sparkles,
   Clock,
+  Globe,
   Loader2,
   AlertTriangle,
   Crown,
@@ -39,6 +41,7 @@ interface SettingsData {
     preferences?: {
       briefing_frequency?: string
       briefing_send_hour?: number
+      timezone?: string
     }
   } | null
   newsletterAddress: { address?: string } | null
@@ -103,6 +106,7 @@ export default function SettingsPage() {
           sendHour={data.profile.preferences?.briefing_send_hour ?? 7}
           plan={data.plan ?? "free"}
         />
+        <TimezoneSection timezone={data.profile.preferences?.timezone ?? ""} />
         <NewsletterSection address={data.newsletterAddress?.address ?? ""} />
         <AccountSection email={data.email ?? ""} />
       </div>
@@ -538,6 +542,108 @@ function BriefingSection({
           )}
         </div>
       )}
+    </Section>
+  )
+}
+
+// ── Timezone section ──────────────────────────────────────────────────
+
+const COMMON_TIMEZONES = [
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Los_Angeles",
+  "America/Anchorage",
+  "Pacific/Honolulu",
+  "America/Toronto",
+  "America/Vancouver",
+  "Europe/London",
+  "Europe/Paris",
+  "Europe/Berlin",
+  "Europe/Amsterdam",
+  "Europe/Rome",
+  "Europe/Madrid",
+  "Europe/Zurich",
+  "Europe/Stockholm",
+  "Asia/Tokyo",
+  "Asia/Shanghai",
+  "Asia/Singapore",
+  "Asia/Kolkata",
+  "Asia/Dubai",
+  "Australia/Sydney",
+  "Australia/Melbourne",
+  "Pacific/Auckland",
+]
+
+function formatTzLabel(tz: string): string {
+  try {
+    const offset = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      timeZoneName: "shortOffset",
+    })
+      .formatToParts(new Date())
+      .find((p) => p.type === "timeZoneName")?.value ?? ""
+    const city = tz.split("/").pop()?.replace(/_/g, " ") ?? tz
+    return `${city} (${offset})`
+  } catch {
+    return tz
+  }
+}
+
+function TimezoneSection({ timezone: initial }: { timezone: string }) {
+  const detected = Intl.DateTimeFormat().resolvedOptions().timeZone
+  const [timezone, setTimezone] = useState(initial || detected)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  const handleSave = useCallback(async () => {
+    setSaving(true)
+    const formData = new FormData()
+    formData.set("timezone", timezone)
+    const result = await updateTimezone(formData)
+    setSaving(false)
+    if (result.success) {
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    }
+  }, [timezone])
+
+  return (
+    <Section
+      icon={Globe}
+      title="Timezone"
+      description="Used for briefing delivery times and content scheduling."
+    >
+      <div className="space-y-3">
+        <select
+          value={timezone}
+          onChange={(e) => setTimezone(e.target.value)}
+          className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+        >
+          {COMMON_TIMEZONES.map((tz) => (
+            <option key={tz} value={tz}>
+              {formatTzLabel(tz)}
+            </option>
+          ))}
+          {!COMMON_TIMEZONES.includes(timezone) && timezone && (
+            <option value={timezone}>{formatTzLabel(timezone)}</option>
+          )}
+        </select>
+        <div className="flex items-center gap-3">
+          <Button
+            onClick={handleSave}
+            disabled={saving || timezone === initial}
+            size="sm"
+          >
+            {saving ? "Saving..." : "Save"}
+          </Button>
+          {saved && (
+            <span className="flex items-center gap-1 text-sm text-green-600">
+              <Check className="size-3.5" /> Saved
+            </span>
+          )}
+        </div>
+      </div>
     </Section>
   )
 }
