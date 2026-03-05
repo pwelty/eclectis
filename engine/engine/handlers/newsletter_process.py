@@ -150,6 +150,21 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
     if not html:
         return {"status": "error", "reason": "No HTML body"}
 
+    # Create newsletter_issues row (only when feed_id is present)
+    issue_id = None
+    if feed_id:
+        try:
+            parsed_feed_id = UUID(feed_id) if isinstance(feed_id, str) else feed_id
+            issue_id = await db.fetchval(
+                """INSERT INTO newsletter_issues (user_id, feed_id, subject, sender_email, status)
+                   VALUES ($1, $2, $3, $4, 'processing')
+                   RETURNING id""",
+                user_id, parsed_feed_id, subject, sender,
+            )
+            bound_log.info("newsletter.issue_created", issue_id=str(issue_id))
+        except Exception as exc:
+            bound_log.warning("newsletter.issue_create_failed", error=str(exc))
+
     # Classify newsletter
     links = _extract_links(html)
     newsletter_type = _detect_newsletter_type(html, links)
@@ -157,27 +172,10 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
 
     queued = 0
 
-    if newsletter_type == "content":
-        # The newsletter IS the article — queue article.add with body content
-        plain_text = _html_to_text(html)
-        await db.execute(
-            """
-            INSERT INTO commands (type, user_id, payload)
-            VALUES ('article.add', $1, $2)
-            """,
-            user_id,
-            json.dumps({
-                "title": subject,
-                "content": plain_text[:100_000],
-                "source": "newsletter",
-                "feed_id": feed_id,
-                "content_type": "newsletter",
-            }),
-        )
-        queued = 1
-    else:
-        # Link newsletter — queue article.add for each extracted link
-        for link in links:
+    try:
+        if newsletter_type == "content":
+            # The newsletter IS the article — queue article.add with body content
+            plain_text = _html_to_text(html)
             await db.execute(
                 """
                 INSERT INTO commands (type, user_id, payload)
@@ -185,14 +183,53 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
                 """,
                 user_id,
                 json.dumps({
-                    "url": link["url"],
-                    "title": link["title"],
+                    "title": subject,
+                    "content": plain_text[:100_000],
                     "source": "newsletter",
                     "feed_id": feed_id,
-                    "content_type": "article",
+                    "newsletter_issue_id": str(issue_id) if issue_id else None,
+                    "content_type": "newsletter",
                 }),
             )
-            queued += 1
+            queued = 1
+        else:
+            # Link newsletter — queue article.add for each extracted link
+            for link in links:
+                await db.execute(
+                    """
+                    INSERT INTO commands (type, user_id, payload)
+                    VALUES ('article.add', $1, $2)
+                    """,
+                    user_id,
+                    json.dumps({
+                        "url": link["url"],
+                        "title": link["title"],
+                        "source": "newsletter",
+                        "feed_id": feed_id,
+                        "newsletter_issue_id": str(issue_id) if issue_id else None,
+                        "content_type": "article",
+                    }),
+                )
+                queued += 1
 
-    bound_log.info("newsletter.done", type=newsletter_type, queued=queued)
-    return {"type": newsletter_type, "links_found": len(links), "queued": queued}
+        # Mark issue as complete
+        if issue_id:
+            await db.execute(
+                """UPDATE newsletter_issues
+                   SET status = 'complete', processed_at = NOW(),
+                       content_type = $2, article_count = $3
+                   WHERE id = $1""",
+                issue_id, newsletter_type, queued,
+            )
+    except Exception as exc:
+        if issue_id:
+            await db.execute(
+                """UPDATE newsletter_issues
+                   SET status = 'failed', error_message = $2
+                   WHERE id = $1""",
+                issue_id, str(exc)[:500],
+            )
+        raise
+
+    bound_log.info("newsletter.done", type=newsletter_type, queued=queued, issue_id=str(issue_id) if issue_id else None)
+    return {"type": newsletter_type, "links_found": len(links), "queued": queued, "issue_id": str(issue_id) if issue_id else None}

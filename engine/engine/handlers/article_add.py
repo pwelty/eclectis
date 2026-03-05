@@ -82,6 +82,7 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
     source = payload.get("source", "unknown")
     feed_id = payload.get("feed_id")
     content_type = payload.get("content_type", "article")
+    newsletter_issue_id = payload.get("newsletter_issue_id")
 
     bound_log = log.bind(user_id=str(user_id), source=source)
 
@@ -140,15 +141,17 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
             bound_log.info("article.add.prescore_rejected", title=title[:80], url=url[:80])
             # Insert with score 0, skip fetch and score
             parsed_feed_id = UUID(feed_id) if isinstance(feed_id, str) and feed_id else feed_id
+            parsed_issue_id = UUID(newsletter_issue_id) if isinstance(newsletter_issue_id, str) and newsletter_issue_id else None
             article_id = await db.fetchval(
                 """
-                INSERT INTO articles (user_id, feed_id, title, url, source, content_type,
+                INSERT INTO articles (user_id, feed_id, newsletter_issue_id, title, url, source, content_type,
                                       ai_score, ai_reason, status, published_at, found_at)
-                VALUES ($1, $2, $3, $4, $5, $6, 0, 'Pre-score: not a real article', 'to_read', NOW(), NOW())
+                VALUES ($1, $2, $3, $4, $5, $6, $7, 0, 'Pre-score: not a real article', 'to_read', NOW(), NOW())
                 ON CONFLICT (user_id, url) DO NOTHING
                 RETURNING id
                 """,
                 user_id, parsed_feed_id if isinstance(parsed_feed_id, UUID) else None,
+                parsed_issue_id,
                 title, url, source, content_type,
             )
             if article_id and not url.startswith("content://"):
@@ -164,15 +167,16 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
 
     # Insert article row
     parsed_feed_id = UUID(feed_id) if isinstance(feed_id, str) and feed_id else feed_id
+    parsed_issue_id = UUID(newsletter_issue_id) if isinstance(newsletter_issue_id, str) and newsletter_issue_id else None
     article_id = await db.fetchval(
         """
-        INSERT INTO articles (user_id, feed_id, title, url, content, source, content_type,
+        INSERT INTO articles (user_id, feed_id, newsletter_issue_id, title, url, content, source, content_type,
                               status, published_at, found_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, 'to_read', NOW(), NOW())
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'to_read', NOW(), NOW())
         ON CONFLICT (user_id, url) DO NOTHING
         RETURNING id
         """,
-        user_id, parsed_feed_id, title, url,
+        user_id, parsed_feed_id, parsed_issue_id, title, url,
         content,
         source, content_type,
     )
