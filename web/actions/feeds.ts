@@ -33,6 +33,18 @@ export interface Article {
   tags: string[]
   found_at: string
   published_at: string | null
+  newsletter_issue_id: string | null
+}
+
+export interface NewsletterIssue {
+  id: string
+  subject: string
+  sender_email: string | null
+  received_at: string
+  processed_at: string | null
+  status: "received" | "processing" | "complete" | "failed"
+  content_type: "content" | "links" | null
+  article_count: number
 }
 
 // ── Get feeds ───────────────────────────────────────────────────────────
@@ -426,10 +438,31 @@ export async function getFeedWithArticles(feedId: string): Promise<{
 
   const { data: articles } = await supabase
     .from("articles")
-    .select("id, title, url, ai_score, ai_reason, summary, content_type, status, tags, found_at, published_at")
+    .select("id, title, url, ai_score, ai_reason, summary, content_type, status, tags, found_at, published_at, newsletter_issue_id")
     .eq("feed_id", feedId)
     .eq("user_id", user.id)
     .order("found_at", { ascending: false })
 
   return { feed: feed as Feed, articles: (articles ?? []) as Article[] }
+}
+
+// ── Get newsletter issues ─────────────────────────────────────────────
+
+export async function getNewsletterIssues(feedId: string): Promise<{
+  issues: NewsletterIssue[]
+  error?: string
+}> {
+  const supabase = await createServerClient()
+  const user = await getUser()
+  if (!user) return { issues: [], error: "Not authenticated" }
+
+  const { data, error } = await supabase
+    .from("newsletter_issues")
+    .select("*")
+    .eq("feed_id", feedId)
+    .eq("user_id", user.id)
+    .order("received_at", { ascending: false })
+
+  if (error) return { issues: [], error: error.message }
+  return { issues: (data ?? []) as NewsletterIssue[] }
 }
