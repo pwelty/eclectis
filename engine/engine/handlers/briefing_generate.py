@@ -227,7 +227,7 @@ def _render_html(data: dict, articles: list, user_name: str) -> str:
                 <tr>
                   <td>
                     <a href="https://www.eclectis.io" style="text-decoration: none;">
-                      <img src="https://www.eclectis.io/icon.svg" alt="" width="28" height="28" style="vertical-align: middle; border-radius: 6px; margin-right: 10px;" />
+                      <img src="https://www.eclectis.io/icon.png" alt="" width="28" height="28" style="vertical-align: middle; border-radius: 6px; margin-right: 10px;" />
                       <span style="color: #ffffff; font-size: 20px; font-weight: 600; vertical-align: middle;">Eclectis</span>
                     </a>
                   </td>
