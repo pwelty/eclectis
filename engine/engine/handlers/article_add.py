@@ -35,9 +35,21 @@ async def _prescore(title: str, url: str, user_id: UUID) -> bool:
     Returns True if the article looks like real content, False for junk
     (terms pages, hiring posts, unsubscribe links, login pages, etc.).
     """
+    from engine.user_context import get_user_context
+    interests, learned = await get_user_context(user_id)
+
+    preferences_section = ""
+    if interests or learned:
+        parts = []
+        if interests:
+            parts.append(f"User interests: {interests}")
+        if learned:
+            parts.append(f"Learned preferences: {learned}")
+        preferences_section = "\n".join(parts) + "\n\nConsider these preferences when deciding — but still reject obvious non-articles.\n"
+
     prompt = f"""Is this article worth reading? Look at the title and URL.
 
-Title: {title}
+{preferences_section}Title: {title}
 URL: {url}
 
 Reject if it's clearly NOT a real article — for example:

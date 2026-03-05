@@ -43,19 +43,13 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
     if article["ai_score"] is not None:
         return {"status": "already_scored", "article_id": str(article_id), "score": article["ai_score"]}
 
-    # Get user interests
-    profile = await db.fetchrow(
-        "SELECT interests, learned_preferences FROM user_profiles WHERE id = $1", user_id
-    )
-    interests = (profile["interests"] or "") if profile else ""
-    learned = (profile["learned_preferences"] or "") if profile else ""
+    # Get user context
+    from engine.user_context import get_user_context, format_preferences_block
+    interests, learned = await get_user_context(user_id)
+    preferences_block = format_preferences_block(interests, learned)
 
     # Build vote history context
     ratings_context = await _build_ratings_context(user_id)
-
-    learned_section = ""
-    if learned:
-        learned_section = f"\nLEARNED PREFERENCES (from user behavior):\n{learned}\n"
 
     # Resolve API key (BYOK gating)
     api_key = await resolve_api_key(user_id)
@@ -65,11 +59,10 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
 
     prompt = f"""Score this article for relevance to the user's interests.
 
-USER INTERESTS:
-{interests or "General technology and business"}
+{preferences_block}
 
 {ratings_context}
-{learned_section}
+
 ARTICLE:
 Title: {article["title"]}
 URL: {article["url"]}

@@ -80,14 +80,19 @@ USER'S STATED INTERESTS:
 RECENT ENGAGEMENT SIGNALS:
 {signals}
 
-Based on these signals, write a concise paragraph (3-5 sentences) describing what this user
-actually values in content — beyond what they've explicitly stated. Focus on:
-- Topics and subtopics they gravitate toward
-- Content style preferences (deep technical vs. high-level, tutorials vs. analysis, etc.)
-- What they actively avoid or dislike
-- Any patterns in what they bookmark vs. just click
+Based on these signals, produce two outputs:
 
-Return ONLY a JSON object: {{"learned_preferences": "Your paragraph here."}}"""
+1. A concise paragraph (3-5 sentences) describing what this user actually values in content — beyond what they've explicitly stated. Focus on:
+   - Topics and subtopics they gravitate toward
+   - Content style preferences (deep technical vs. high-level, tutorials vs. analysis, etc.)
+   - Source preferences (which publications, blogs, or types of sources they favor)
+   - What they actively avoid or dislike
+   - Any patterns in what they bookmark vs. just click
+
+2. A list of 3-8 Google search queries that would find more content this user would love. Be specific — use the topics, terminology, and angles that match their demonstrated preferences. Include a mix of broad and narrow queries.
+
+Return ONLY a JSON object:
+{{"learned_preferences": "Your paragraph here.", "search_terms": ["query 1", "query 2", ...]}}"""
 
 
 @register("user.learn")
@@ -173,5 +178,29 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
         user_id, learned,
     )
 
-    bound_log.info("user.learn.done", events_analyzed=len(events), learned_len=len(learned))
-    return {"status": "learned", "events_analyzed": len(events)}
+    # Auto-populate search terms from learned preferences
+    search_terms = result.get("search_terms", [])
+    terms_added = 0
+    if search_terms:
+        # Deactivate old learned terms, then insert new ones
+        await db.execute(
+            "UPDATE search_terms SET active = FALSE WHERE user_id = $1 AND source = 'learned'",
+            user_id,
+        )
+        for term in search_terms:
+            term = term.strip()
+            if not term:
+                continue
+            try:
+                await db.execute(
+                    """INSERT INTO search_terms (user_id, term, source, active)
+                       VALUES ($1, $2, 'learned', TRUE)
+                       ON CONFLICT (user_id, term) DO UPDATE SET active = TRUE, source = 'learned'""",
+                    user_id, term,
+                )
+                terms_added += 1
+            except Exception as exc:
+                bound_log.warning("user.learn.term_insert_failed", term=term[:80], error=str(exc))
+
+    bound_log.info("user.learn.done", events_analyzed=len(events), learned_len=len(learned), terms_added=terms_added)
+    return {"status": "learned", "events_analyzed": len(events), "terms_added": terms_added}

@@ -100,7 +100,9 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
     api_key = await resolve_api_key(user_id)
 
     # Build scoring context
-    interests = await _get_interests(user_id)
+    from engine.user_context import get_user_context, format_preferences_block
+    interests, learned = await get_user_context(user_id)
+    preferences_block = format_preferences_block(interests, learned)
     ratings_context = await _build_ratings_context(user_id)
 
     # AI filter — score each result individually
@@ -108,7 +110,7 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
     saved_count = 0
 
     for post_data in new_results:
-        scored, usage = await asyncio.to_thread(score_single_result, post_data, interests, ratings_context, api_key)
+        scored, usage = await asyncio.to_thread(score_single_result, post_data, preferences_block, ratings_context, api_key)
         total_tokens += usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
         if usage:
             await log_usage(
@@ -222,11 +224,10 @@ def _extract_domain(url: str) -> str:
         return ""
 
 
-def score_single_result(result: dict, interests: str, ratings_context: str, api_key: str | None = None) -> tuple[dict | None, dict]:
-    prompt = f"""Score this search result for relevance to the interests below.
+def score_single_result(result: dict, preferences_block: str, ratings_context: str, api_key: str | None = None) -> tuple[dict | None, dict]:
+    prompt = f"""Score this search result for relevance to the user's preferences.
 
-INTERESTS:
-{interests}
+{preferences_block}
 
 {ratings_context}
 
@@ -249,11 +250,6 @@ Return ONLY the JSON object, no other text."""
     except Exception as exc:
         log.warning("google_search.score_error", title=result["title"][:60], error=str(exc))
         return None, {}
-
-
-async def _get_interests(user_id: UUID) -> str:
-    row = await db.fetchrow("SELECT interests FROM user_profiles WHERE id = $1", user_id)
-    return (row["interests"] or "") if row else ""
 
 
 async def _build_ratings_context(user_id: UUID) -> str:
