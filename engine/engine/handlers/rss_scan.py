@@ -108,7 +108,9 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
     api_key = await resolve_api_key(user_id)
 
     # Build scoring context
-    interests = await _get_interests(user_id)
+    from engine.user_context import get_user_context, format_preferences_block
+    interests, learned = await get_user_context(user_id)
+    preferences_block = format_preferences_block(interests, learned)
     ratings_context = await _build_ratings_context(user_id)
 
     # AI filter in batches
@@ -117,7 +119,7 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
 
     for i in range(0, len(new_posts), BATCH_SIZE):
         batch = new_posts[i : i + BATCH_SIZE]
-        results, usage = await asyncio.to_thread(_filter_with_claude, batch, interests, ratings_context, api_key)
+        results, usage = await asyncio.to_thread(_filter_with_claude, batch, preferences_block, ratings_context, api_key)
         total_tokens += usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
         if usage:
             await log_usage(
@@ -312,7 +314,7 @@ async def _fetch_feed(client: httpx.AsyncClient, feed, days_back: int) -> list[d
     return posts
 
 
-def _filter_with_claude(posts: list[dict], interests: str, ratings_context: str, api_key: str | None = None) -> tuple[list[dict], dict]:
+def _filter_with_claude(posts: list[dict], preferences_block: str, ratings_context: str, api_key: str | None = None) -> tuple[list[dict], dict]:
     if not posts:
         return [], {}
 
@@ -323,8 +325,7 @@ def _filter_with_claude(posts: list[dict], interests: str, ratings_context: str,
 
     prompt = f"""You are filtering RSS feed posts for relevance to specific interests.
 
-INTERESTS:
-{interests}
+{preferences_block}
 
 {ratings_context}
 
@@ -365,12 +366,6 @@ def _parse_duration(raw: str) -> int | None:
     except ValueError:
         pass
     return None
-
-
-async def _get_interests(user_id: UUID) -> str:
-    """Get user interests from profile."""
-    row = await db.fetchrow("SELECT interests FROM user_profiles WHERE id = $1", user_id)
-    return (row["interests"] or "") if row else ""
 
 
 async def _build_ratings_context(user_id: UUID) -> str:

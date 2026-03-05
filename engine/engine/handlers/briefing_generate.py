@@ -51,7 +51,8 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
         return {"status": "skipped", "reason": f"Only {len(articles)} articles (need {MIN_ARTICLES})"}
 
     # Get user info
-    profile = await db.fetchrow("SELECT name, interests FROM user_profiles WHERE id = $1", user_id)
+    from engine.user_context import get_user_context, format_preferences_block
+    profile = await db.fetchrow("SELECT name FROM user_profiles WHERE id = $1", user_id)
     user_email_row = await db.fetchrow("SELECT email FROM auth.users WHERE id = $1", user_id)
 
     if not user_email_row:
@@ -59,7 +60,8 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
 
     user_name = (profile["name"] or "").strip() if profile else ""
     user_email = user_email_row["email"]
-    interests = (profile["interests"] or "") if profile else ""
+    interests, learned = await get_user_context(user_id)
+    preferences_block = format_preferences_block(interests, learned)
 
     # Build article context for Claude
     articles_text = []
@@ -82,7 +84,7 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
     briefing_data, briefing_usage = await asyncio.to_thread(
         _generate_briefing,
         "\n\n".join(articles_text),
-        interests,
+        preferences_block,
         user_name,
         len(articles),
         api_key,
@@ -127,13 +129,12 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
     return {"briefing_id": str(briefing_id), "sent": sent, "articles": len(articles)}
 
 
-def _generate_briefing(articles_text: str, interests: str, user_name: str, article_count: int, api_key: str | None = None) -> tuple[dict | None, dict]:
+def _generate_briefing(articles_text: str, preferences_block: str, user_name: str, article_count: int, api_key: str | None = None) -> tuple[dict | None, dict]:
     greeting = f"Hi {user_name}" if user_name else "Hi"
 
     prompt = f"""Generate a daily intelligence briefing email from these curated articles.
 
-USER INTERESTS:
-{interests or "General technology and business"}
+{preferences_block}
 
 ARTICLES:
 {articles_text}
