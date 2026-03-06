@@ -3,6 +3,10 @@ import { NextResponse, type NextRequest } from "next/server"
 
 const PUBLIC_ROUTES = ["/", "/login", "/signup", "/reset-password", "/auth/callback", "/auth/confirm"]
 
+export function shouldRedirectAuthenticatedUser(pathname: string): boolean {
+  return pathname === "/login" || pathname === "/signup"
+}
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
@@ -55,7 +59,7 @@ export async function updateSession(request: NextRequest) {
   }
 
   // Redirect authenticated users away from auth pages
-  const isAuthRoute = pathname === "/login" || pathname === "/signup" || pathname === "/reset-password"
+  const isAuthRoute = shouldRedirectAuthenticatedUser(pathname)
   if (user && isAuthRoute) {
     const url = request.nextUrl.clone()
     url.pathname = "/onboarding"
