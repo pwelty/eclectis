@@ -167,6 +167,44 @@ export async function updateTimezone(formData: FormData) {
   return { success: true }
 }
 
+// ── Search countries ──────────────────────────────────────────────────────
+
+export async function updateSearchCountries(formData: FormData) {
+  const supabase = await createServerClient()
+  const user = await getUser()
+  if (!user) return { error: "Not authenticated" }
+
+  const raw = (formData.get("search_countries") as string) ?? ""
+  const countries = raw
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)
+
+  // Get current preferences
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("preferences")
+    .eq("id", user.id)
+    .single()
+
+  const currentPrefs = (profile?.preferences as Record<string, unknown>) ?? {}
+
+  const { error } = await supabase
+    .from("user_profiles")
+    .update({
+      preferences: {
+        ...currentPrefs,
+        search_countries: countries.length > 0 ? countries : null,
+      },
+    })
+    .eq("id", user.id)
+
+  if (error) return { error: error.message }
+
+  revalidatePath("/settings")
+  return { success: true }
+}
+
 // ── Update password ────────────────────────────────────────────────────────
 
 export async function updatePassword(formData: FormData) {

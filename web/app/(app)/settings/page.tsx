@@ -13,6 +13,7 @@ import {
   removeApiKey,
   updateBriefingPreferences,
   updateTimezone,
+  updateSearchCountries,
   updatePassword,
 } from "@/actions/settings"
 import {
@@ -26,6 +27,7 @@ import {
   Sparkles,
   Clock,
   Globe,
+  Search,
   Loader2,
   AlertTriangle,
   Crown,
@@ -42,6 +44,7 @@ interface SettingsData {
       briefing_frequency?: string
       briefing_send_hour?: number
       timezone?: string
+      search_countries?: string[]
     }
   } | null
   newsletterAddress: { address?: string } | null
@@ -107,6 +110,7 @@ export default function SettingsPage() {
           plan={data.plan ?? "free"}
         />
         <TimezoneSection timezone={data.profile.preferences?.timezone ?? ""} />
+        <SearchCountriesSection countries={data.profile.preferences?.search_countries ?? []} />
         <NewsletterSection address={data.newsletterAddress?.address ?? ""} />
         <AccountSection email={data.email ?? ""} />
       </div>
@@ -633,6 +637,59 @@ function TimezoneSection({ timezone: initial }: { timezone: string }) {
           <Button
             onClick={handleSave}
             disabled={saving || timezone === initial}
+            size="sm"
+          >
+            {saving ? "Saving..." : "Save"}
+          </Button>
+          {saved && (
+            <span className="flex items-center gap-1 text-sm text-green-600">
+              <Check className="size-3.5" /> Saved
+            </span>
+          )}
+        </div>
+      </div>
+    </Section>
+  )
+}
+
+// ── Search countries section ───────────────────────────────────────────────
+
+function SearchCountriesSection({ countries: initial }: { countries: string[] }) {
+  const [value, setValue] = useState(initial.join(", "))
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  const handleSave = useCallback(async () => {
+    setSaving(true)
+    const formData = new FormData()
+    formData.set("search_countries", value)
+    const result = await updateSearchCountries(formData)
+    setSaving(false)
+    if (result.success) {
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    }
+  }, [value])
+
+  return (
+    <Section
+      icon={Search}
+      title="Search countries"
+      description="Run each search term once per country for international results."
+    >
+      <div className="space-y-3">
+        <Input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="us, de, gb, fr"
+        />
+        <p className="text-xs text-muted-foreground">
+          Comma-separated country codes. Each search term runs once per country. Leave empty for default.
+        </p>
+        <div className="flex items-center gap-3">
+          <Button
+            onClick={handleSave}
+            disabled={saving || value === initial.join(", ")}
             size="sm"
           >
             {saving ? "Saving..." : "Save"}

@@ -45,28 +45,36 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
         log.info("google_search.no_search_terms", user_id=str(user_id))
         return {"error": "No search terms configured"}
 
+    # Read search countries from user preferences
+    prefs_row = await db.fetchrow(
+        "SELECT preferences FROM user_profiles WHERE id = $1", user_id
+    )
+    prefs = prefs_row["preferences"] if prefs_row and prefs_row["preferences"] else {}
+    countries: list[str | None] = prefs.get("search_countries") or [None]
+
     # Create scan log
     scan_log_id = await db.fetchval(
         "INSERT INTO scan_logs (user_id) VALUES ($1) RETURNING id",
         user_id,
     )
 
-    # Search each term, deduplicate by URL
+    # Search each term × country, deduplicate by URL
     all_results: list[dict] = []
     seen_urls: set[str] = set()
 
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             for query in queries:
-                try:
-                    results = await search_google(client, query)
-                    for r in results:
-                        if r["url"] not in seen_urls:
-                            seen_urls.add(r["url"])
-                            all_results.append(r)
-                    log.info("google_search.query_done", query=query[:80], results=len(results))
-                except Exception as exc:
-                    log.warning("google_search.query_error", query=query[:80], error=str(exc))
+                for gl in countries:
+                    try:
+                        results = await search_google(client, query, gl=gl)
+                        for r in results:
+                            if r["url"] not in seen_urls:
+                                seen_urls.add(r["url"])
+                                all_results.append(r)
+                        log.info("google_search.query_done", query=query[:80], gl=gl, results=len(results))
+                    except Exception as exc:
+                        log.warning("google_search.query_error", query=query[:80], gl=gl, error=str(exc))
     except Exception as exc:
         log.warning("google_search.api_error", error=str(exc))
         return {"error": str(exc)}
@@ -187,16 +195,34 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
     return {"scan_log_id": str(scan_log_id), "posts_found": len(all_results), "posts_saved": saved_count}
 
 
-async def search_google(client: httpx.AsyncClient, query: str) -> list[dict]:
+async def search_google(client: httpx.AsyncClient, query: str, *, gl: str | None = None) -> list[dict]:
     """Execute a search via Serper.dev (Google SERP API)."""
+    body: dict = {"q": query, "num": MAX_RESULTS}
+    if gl:
+        body["gl"] = gl
+
     resp = await client.post(
         SERPER_ENDPOINT,
         headers={
             "X-API-KEY": settings.serper_api_key,
             "Content-Type": "application/json",
         },
-        json={"q": query, "num": MAX_RESULTS},
+        json=body,
     )
+
+    # Rate-limit retry: one backoff attempt on 429
+    if resp.status_code == 429:
+        log.warning("google_search.rate_limited", query=query[:80], gl=gl)
+        await asyncio.sleep(2)
+        resp = await client.post(
+            SERPER_ENDPOINT,
+            headers={
+                "X-API-KEY": settings.serper_api_key,
+                "Content-Type": "application/json",
+            },
+            json=body,
+        )
+
     resp.raise_for_status()
     data = resp.json()
 
