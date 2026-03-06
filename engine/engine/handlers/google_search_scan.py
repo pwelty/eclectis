@@ -26,6 +26,29 @@ MIN_SCORE = 6
 SERPER_ENDPOINT = "https://google.serper.dev/search"
 
 
+async def _load_queries(user_id: UUID, term_id: str | None = None) -> list[str]:
+    """Load active search terms for a user, optionally scoped to one term."""
+    if term_id:
+        term_rows = await db.fetch(
+            """
+            SELECT term
+            FROM search_terms
+            WHERE user_id = $1
+              AND id = $2
+              AND active = TRUE
+            """,
+            user_id,
+            term_id,
+        )
+    else:
+        term_rows = await db.fetch(
+            "SELECT term FROM search_terms WHERE user_id = $1 AND active = TRUE",
+            user_id,
+        )
+
+    return [r["term"].strip() for r in term_rows if r["term"].strip()]
+
+
 @register("google_search.scan")
 async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
     if not settings.serper_api_key:
@@ -33,13 +56,10 @@ async def handle(*, command_id: UUID, payload: dict, user_id: UUID) -> dict:
         return {"error": "Serper API key not configured"}
 
     min_score = payload.get("min_score", MIN_SCORE)
+    term_id = payload.get("term_id")
 
     # Read search terms from search_terms table
-    term_rows = await db.fetch(
-        "SELECT term FROM search_terms WHERE user_id = $1 AND active = TRUE",
-        user_id,
-    )
-    queries = [r["term"].strip() for r in term_rows if r["term"].strip()]
+    queries = await _load_queries(user_id, term_id)
 
     if not queries:
         log.info("google_search.no_search_terms", user_id=str(user_id))

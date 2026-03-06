@@ -190,7 +190,7 @@ export async function triggerSearch(
 
   const { error } = await supabase.from("commands").insert({
     user_id: user.id,
-    type: "google_search_scan",
+    type: "google_search.scan",
     payload: { term_id: termId },
   })
 
