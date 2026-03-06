@@ -31,3 +31,11 @@
 **Decision:** Reuse the existing Eclectis design system (navy-slate brand, warm amber accent, shadcn, light + dark mode).
 
 **Context:** The old Eclectis project had a complete design system and landing page. The visual identity is solid. Only the copy needs rewriting for the new "intelligence layer" positioning.
+
+## 2026-03-06 — Scout issue selection
+
+**Decision:** During scouting, prefer small execution bugs and workflow mismatches over broader product enhancements.
+
+**Context:** The open backlog is thin and mostly unmilestoned. Several larger opportunities surfaced during exploration, but they were either already represented by existing backlog issues or still needed product decisions before they would be safe for `/grind`.
+
+**Approach:** Create issues only for findings that already have a clear reproduction path in the current codebase, point to specific files/functions, and can likely be completed in one focused agent pass. Skip broader ideas like feed discovery improvements, newsletter inbox scanning, and analytics expansion because they need human product direction or duplicate existing backlog themes.
