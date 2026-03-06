@@ -512,6 +512,7 @@ export function FeedList({ feedType, title, description, showOPML = false, showS
                 key={feed.id}
                 feed={feed}
                 feedType={feedType}
+                canScan={feedType !== "newsletter"}
                 editingId={editingId}
                 editName={editName}
                 setEditName={setEditName}
@@ -553,6 +554,7 @@ const DETAIL_PATHS: Record<FeedType, string> = {
 function FeedRow({
   feed,
   feedType,
+  canScan,
   editingId,
   editName,
   setEditName,
@@ -569,6 +571,7 @@ function FeedRow({
 }: {
   feed: Feed
   feedType: FeedType
+  canScan: boolean
   editingId: string | null
   editName: string
   setEditName: (v: string) => void
@@ -709,16 +712,18 @@ function FeedRow({
           >
             <Pencil className="size-3.5" />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            onClick={() => onScan(feed.id)}
-            title="Scan now"
-            disabled={isScanning}
-            className={isScanning ? "animate-spin" : ""}
-          >
-            <RefreshCw className="size-3.5" />
-          </Button>
+          {canScan && (
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              onClick={() => onScan(feed.id)}
+              title="Scan now"
+              disabled={isScanning}
+              className={isScanning ? "animate-spin" : ""}
+            >
+              <RefreshCw className="size-3.5" />
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon-xs"

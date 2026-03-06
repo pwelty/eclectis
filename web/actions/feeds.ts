@@ -201,15 +201,15 @@ export async function triggerScan(feedId: string) {
     .single()
 
   if (!feed) return { error: "Feed not found" }
-
-  // rss and podcast feeds use rss.scan; newsletters use newsletter.process
-  const commandType = feed.type === "newsletter" ? "newsletter.process" : "rss.scan"
+  if (feed.type === "newsletter") {
+    return { error: "Newsletter feeds can only be processed from incoming email." }
+  }
 
   const { error } = await supabase
     .from("commands")
     .insert({
       user_id: user.id,
-      type: commandType,
+      type: "rss.scan",
       payload: { feed_id: feedId },
     })
 
@@ -227,14 +227,15 @@ export async function discoverAll(feedType: Feed["type"]) {
   const supabase = await createServerClient()
   const user = await getUser()
   if (!user) return { error: "Not authenticated" }
-
-  const commandType = feedType === "newsletter" ? "newsletter.process" : "rss.scan"
+  if (feedType === "newsletter") {
+    return { error: "Newsletter feeds can only be processed from incoming email." }
+  }
 
   const { error } = await supabase
     .from("commands")
     .insert({
       user_id: user.id,
-      type: commandType,
+      type: "rss.scan",
     })
 
   if (error) return { error: error.message }
