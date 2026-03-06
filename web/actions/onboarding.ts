@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { createServerClient, getUser } from "@/lib/supabase/server"
+import { getPlanLimits } from "@/lib/plans"
+import { normalizeUrl } from "@/lib/normalize-url"
 
 // ── Save interests ──────────────────────────────────────────────────────
 
@@ -35,11 +37,33 @@ export async function addFeed(formData: FormData) {
   const name = (formData.get("name") as string)?.trim() || url
 
   if (!url) return { feed: null, error: "URL is required" }
+  const normalizedUrl = normalizeUrl(url)
+
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("plan")
+    .eq("id", user.id)
+    .single()
+
+  const limits = getPlanLimits(profile?.plan ?? "free")
+  if (limits.maxFeeds !== Infinity) {
+    const { count } = await supabase
+      .from("feeds")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+
+    if ((count ?? 0) >= limits.maxFeeds) {
+      return {
+        feed: null,
+        error: `Free plan is limited to ${limits.maxFeeds} feeds. Upgrade to Pro for unlimited.`,
+      }
+    }
+  }
 
   const { data: feed, error } = await supabase
     .from("feeds")
     .upsert(
-      { user_id: user.id, name, url, type: "rss" },
+      { user_id: user.id, name, url: normalizedUrl, type: "rss" },
       { onConflict: "user_id,url" }
     )
     .select()
