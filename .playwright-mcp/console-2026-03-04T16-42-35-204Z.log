@@ -1,0 +1,4 @@
+[     216ms] [ERROR] Failed to load resource: net::ERR_SSL_PROTOCOL_ERROR @ https://www.googletagmanager.com/gtag/js?id=G-1W8VPRTZ6D:0
+[   60517ms] [ERROR] WebSocket connection to 'ws://localhost:3001/_next/webpack-hmr?id=FzwwpdlX9ilc7Qka1TDTK' failed:  @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_client_17643121._.js:10879
+[   61527ms] [ERROR] WebSocket connection to 'ws://localhost:3001/_next/webpack-hmr?id=FzwwpdlX9ilc7Qka1TDTK' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_client_17643121._.js:10879
+[   62531ms] [ERROR] WebSocket connection to 'ws://localhost:3001/_next/webpack-hmr?id=FzwwpdlX9ilc7Qka1TDTK' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_client_17643121._.js:10879

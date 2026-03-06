@@ -1,0 +1,34 @@
+[project]
+slug = "eclectis"
+name = "Eclectis"
+vision_file = "PRODUCT.md"
+
+[tasks]
+provider = "github"
+
+[github]
+owner = "pwelty"
+repo = "eclectis"
+in_progress_label = "in-progress"
+
+[notion]
+product_page_id = "2fec48de-af0e-8029-a97f-c1eeb06c33b7"
+product_name = "Eclectis"
+docs_root_url = ""
+
+[policy]
+roadmap_todo_backup_only = true
+enforce_name_match = true
+require_product_md = true
+
+[apps.supabase]
+path = "supabase"
+
+[apps.engine]
+path = "engine"
+
+[apps.web]
+path = "web"
+
+[ga4]
+property_id = "526846823"
