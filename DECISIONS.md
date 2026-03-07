@@ -39,3 +39,14 @@
 **Context:** The open backlog is thin and mostly unmilestoned. Several larger opportunities surfaced during exploration, but they were either already represented by existing backlog issues or still needed product decisions before they would be safe for `/grind`.
 
 **Approach:** Create issues only for findings that already have a clear reproduction path in the current codebase, point to specific files/functions, and can likely be completed in one focused agent pass. Skip broader ideas like feed discovery improvements, newsletter inbox scanning, and analytics expansion because they need human product direction or duplicate existing backlog themes.
+
+## 2026-03-07 — Scout: security and performance findings
+
+**Decision:** Created 5 issues from a deep-dive scout across engine, web, and database layers. Mixed grindable fixes and one needs-prep security issue.
+
+**Findings included but skipped:**
+- Trailing slash route matching in middleware — low practical risk since Next.js normalizes paths
+- Several medium-severity web agent findings (missing loading states, accessibility gaps) — deferred as too broad/subjective for autonomous grinding
+- Database findings around missing RLS on `ai_usage_logs` and `scan_logs` — these are admin/internal tables where RLS would add friction without real security benefit
+
+**Approach for #80 (admin impersonation):** Created as needs-prep rather than ready-for-grind because the fix requires a design decision (signed cookie vs server-side session vs remove cookie). Security issues warrant human review before autonomous implementation.
