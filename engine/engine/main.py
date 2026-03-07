@@ -266,14 +266,35 @@ async def admin_usage(
 
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
+    VALID_TRUNCS = {"day", "month"}
     if rollup == "monthly":
         date_trunc = "month"
     else:
         date_trunc = "day"
 
-    query = f"""
+    if date_trunc not in VALID_TRUNCS:
+        return JSONResponse({"error": "Invalid rollup"}, status_code=400)
+
+    if date_trunc == "month":
+        query = f"""
         SELECT
-            date_trunc('{date_trunc}', created_at) AS period,
+            date_trunc('month', created_at) AS period,
+            user_id,
+            source,
+            model,
+            COUNT(*) AS call_count,
+            SUM(input_tokens) AS total_input_tokens,
+            SUM(output_tokens) AS total_output_tokens,
+            SUM(cost_usd) AS total_cost_usd
+        FROM ai_usage_logs
+        {where}
+        GROUP BY period, user_id, source, model
+        ORDER BY period DESC, total_cost_usd DESC
+    """
+    else:
+        query = f"""
+        SELECT
+            date_trunc('day', created_at) AS period,
             user_id,
             source,
             model,
