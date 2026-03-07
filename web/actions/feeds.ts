@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import { createServerClient, getUser } from "@/lib/supabase/server"
 import { getPlanLimits } from "@/lib/plans"
 import { normalizeUrl } from "@/lib/normalize-url"
+import * as Sentry from "@sentry/nextjs"
 import { trackEvent } from "@/actions/engagement"
 
 // ── Types ───────────────────────────────────────────────────────────────
@@ -145,7 +146,7 @@ export async function updateFeed(feedId: string, formData: FormData) {
   }
 
   if (updates.active === false) {
-    trackEvent("feed_disable", undefined, feedId).catch(() => {})
+    trackEvent("feed_disable", undefined, feedId).catch((e) => Sentry.captureException(e))
   }
 
   const { error } = await supabase
@@ -169,7 +170,7 @@ export async function deleteFeed(feedId: string) {
   const user = await getUser()
   if (!user) return { error: "Not authenticated" }
 
-  trackEvent("feed_delete", undefined, feedId).catch(() => {})
+  trackEvent("feed_delete", undefined, feedId).catch((e) => Sentry.captureException(e))
 
   const { error } = await supabase
     .from("feeds")

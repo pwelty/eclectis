@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 import { createServerClient, getUser } from "@/lib/supabase/server"
+import * as Sentry from "@sentry/nextjs"
 import { trackEvent } from "@/actions/engagement"
 
 const PAGE_SIZE = 20
@@ -112,7 +113,7 @@ export async function vote(articleId: string, direction: "thumbs_up" | "thumbs_d
   // Track engagement event (fire-and-forget, don't block the response)
   if (!existing || existing.direction !== direction) {
     const eventType = direction === "thumbs_up" ? "vote_up" : "vote_down"
-    trackEvent(eventType, articleId).catch(() => {})
+    trackEvent(eventType, articleId).catch((e) => Sentry.captureException(e))
   }
 
   revalidatePath("/articles")
@@ -140,7 +141,7 @@ export async function toggleBookmark(articleId: string) {
     .eq("id", articleId)
     .eq("user_id", user.id)
 
-  trackEvent(article.bookmarked ? "unbookmark" : "bookmark", articleId).catch(() => {})
+  trackEvent(article.bookmarked ? "unbookmark" : "bookmark", articleId).catch((e) => Sentry.captureException(e))
 
   revalidatePath("/articles")
   return { bookmarked: !article.bookmarked }
@@ -157,7 +158,7 @@ export async function markAsRead(articleId: string) {
     .eq("id", articleId)
     .eq("user_id", user.id)
 
-  trackEvent("mark_read", articleId).catch(() => {})
+  trackEvent("mark_read", articleId).catch((e) => Sentry.captureException(e))
 
   return { success: true }
 }
